@@ -93,6 +93,7 @@ CustomWriteImageData(const std::string* basepathString,
                      const std::string* filenameString,
                      const tinygltf::Image* image,
                      bool embedImages,
+                     const tinygltf::FsCallbacks * fs_cb,
                      const tinygltf::URICallbacks* uriCallbacks,
                      std::string* outUri,
                      void* userData)

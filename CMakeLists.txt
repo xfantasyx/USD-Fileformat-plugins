@@ -91,6 +91,18 @@ if (USD_FILEFORMATS_STANDALONE)
     endif ()
 endif ()
 
+if(NOT DEFINED PXR_INSTALL_BIN_DIR)
+    set(PXR_INSTALL_BIN_DIR "$<CONFIG>/bin" CACHE PATH "Installation directory for executables")
+endif()
+
+if(NOT DEFINED PXR_INSTALL_LIB_DIR)
+    set(PXR_INSTALL_LIB_DIR "$<CONFIG>/lib" CACHE PATH "Installation directory for libraries")
+endif()
+
+if(NOT DEFINED PXR_INSTALL_PLUGIN_DIR)
+    set(PXR_INSTALL_PLUGIN_DIR "$<CONFIG>/plugin" CACHE PATH "Installation directory for plugins")
+endif()
+
 add_subdirectory(utils)
 
 if (USD_FILEFORMATS_ENABLE_FBX)
@@ -114,7 +126,7 @@ endif()
 
 if (UNIX AND NOT APPLE)
     if (USD_FILEFORMATS_STANDALONE AND USD_FILEFORMATS_BUILD_TESTS)
-        install(TARGETS fileformatUtils DESTINATION plugin/usd)
+        install(TARGETS fileformatUtils DESTINATION ${${PXR_INSTALL_PLUGIN_DIR}}/usd)
     endif ()
 endif ()
 

@@ -36,7 +36,8 @@ PRIVATE
     usdUtils
     arch
     fileformatUtils
-    fbxsdk::fbxsdk
+    FBX 
+    #fbxsdk::fbxsdk
 )
 
 target_precompile_headers(usdFbx
@@ -82,14 +83,14 @@ set_target_properties(usdFbx PROPERTIES RESOURCE_FILES "${CMAKE_CURRENT_BINARY_D
 if(USDFBX_ENABLE_INSTALL)
     install(
         TARGETS  usdFbx
-        RUNTIME  DESTINATION plugin/usd COMPONENT Runtime
-        LIBRARY  DESTINATION plugin/usd COMPONENT Runtime
-        RESOURCE DESTINATION plugin/usd/usdFbx/resources COMPONENT Runtime
+        RUNTIME  DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+        LIBRARY  DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+        RESOURCE DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd/usdFbx/resources COMPONENT Runtime
     )
 
     install(
         FILES plugInfo.root.json
-        DESTINATION plugin/usd
+        DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd
         RENAME plugInfo.json
         COMPONENT Runtime
     )

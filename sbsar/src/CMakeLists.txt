@@ -161,9 +161,9 @@ if(USDSBSAR_ENABLE_INSTALL)
   # Install the plugInfo.json file for the specific plugin
   install(
     TARGETS ${PLUGIN_NAME}
-    RUNTIME DESTINATION plugin/usd COMPONENT Runtime
-    LIBRARY DESTINATION plugin/usd COMPONENT Runtime
-    RESOURCE DESTINATION plugin/usd/${PLUGIN_NAME}/resources COMPONENT Runtime
+    RUNTIME DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+    LIBRARY DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+    RESOURCE DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd/${PLUGIN_NAME}/resources COMPONENT Runtime
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} COMPONENT Devel)
 
   # Install the master plugInfo.json file for the install directory Note that this
@@ -172,7 +172,7 @@ if(USDSBSAR_ENABLE_INSTALL)
   # <pluginName>/resources/plugInfo.json
   install(
           FILES ${CMAKE_CURRENT_SOURCE_DIR}/plugInfo.root.json
-          DESTINATION plugin/usd
+          DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd
           RENAME plugInfo.json
           COMPONENT Runtime)
 endif()

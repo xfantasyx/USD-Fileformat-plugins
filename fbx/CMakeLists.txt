@@ -7,9 +7,11 @@ if (NOT TARGET usd)
 endif()
 find_package(ZLIB REQUIRED)
 find_package(LibXml2 REQUIRED)
-find_package(FBXSDK REQUIRED)
-find_package(GTest REQUIRED)
+find_package(FBX REQUIRED)
 
+if(USD_FILEFORMATS_BUILD_TESTS)
+    find_package(GTest REQUIRED)
+endif()
 
 add_subdirectory(src)
 if(USD_FILEFORMATS_BUILD_TESTS)

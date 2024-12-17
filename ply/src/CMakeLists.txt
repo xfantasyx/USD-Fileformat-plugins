@@ -31,7 +31,8 @@ PRIVATE
     usdGeom
     usdSkel
     usdShade
-    happly::happly
+    happly
+    # happly::happly
     fileformatUtils
 )
 
@@ -111,14 +112,14 @@ set_target_properties(usdPly PROPERTIES RESOURCE_FILES "${CMAKE_CURRENT_BINARY_D
 if(USDPLY_ENABLE_INSTALL)
     install(
         TARGETS usdPly
-        RUNTIME DESTINATION plugin/usd COMPONENT Runtime
-        LIBRARY DESTINATION plugin/usd COMPONENT Runtime
-        RESOURCE DESTINATION plugin/usd/usdPly/resources COMPONENT Runtime
+        RUNTIME DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+        LIBRARY DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+        RESOURCE DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd/usdPly/resources COMPONENT Runtime
     )
 
     install(
         FILES plugInfo.root.json
-        DESTINATION plugin/usd
+        DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd
         RENAME plugInfo.json
         COMPONENT Runtime
     )

@@ -114,14 +114,14 @@ set_target_properties(usdStl PROPERTIES RESOURCE_FILES "${CMAKE_CURRENT_BINARY_D
 if(USDSTL_ENABLE_INSTALL)
     install(
         TARGETS usdStl
-        RUNTIME DESTINATION plugin/usd COMPONENT Runtime
-        LIBRARY DESTINATION plugin/usd COMPONENT Runtime
-        RESOURCE DESTINATION plugin/usd/usdStl/resources COMPONENT Runtime
+        RUNTIME DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+        LIBRARY DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd COMPONENT Runtime
+        RESOURCE DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd/usdStl/resources COMPONENT Runtime
     )
 
     install(
         FILES plugInfo.root.json
-        DESTINATION plugin/usd
+        DESTINATION ${PXR_INSTALL_PLUGIN_DIR}/usd
         RENAME plugInfo.json
         COMPONENT Runtime
     )
