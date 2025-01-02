@@ -265,6 +265,7 @@ enum USDFFUTILS_API ImageFormat
     ImageFormatTga,
     ImageFormatTiff,
     ImageFormatWebp,
+    ImageFormatDDS,
 };
 
 struct USDFFUTILS_API ImageAsset

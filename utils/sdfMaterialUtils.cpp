@@ -417,7 +417,7 @@ ShaderRegistry::ShaderRegistry()
     }, {
         { TfToken("outputs:out"), SdfValueTypeNames->Float }
     }}},
-    { MtlXTokens->ND_normalmap, {{
+    { MtlXTokens->ND_normalmap_float, {{
         { TfToken("inputs:in"), SdfValueTypeNames->Float3 }
     }, {
         { TfToken("outputs:out"), SdfValueTypeNames->Float3 }
@@ -471,7 +471,7 @@ ShaderRegistry::ShaderRegistry()
         { TfToken("inputs:thin_film_ior"), SdfValueTypeNames->Float },
         { TfToken("inputs:emission_luminance"), SdfValueTypeNames->Float },
         { TfToken("inputs:emission_color"), SdfValueTypeNames->Color3f },
-        { TfToken("inputs:geometry_opacity"), SdfValueTypeNames->Color3f },
+        { TfToken("inputs:geometry_opacity"), SdfValueTypeNames->Float },
         { TfToken("inputs:geometry_thin_walled"), SdfValueTypeNames->Bool },
         { TfToken("inputs:geometry_normal"), SdfValueTypeNames->Float3 },
         { TfToken("inputs:geometry_coat_normal"), SdfValueTypeNames->Float3 },
@@ -621,7 +621,7 @@ ShaderRegistry::ShaderRegistry()
         { OpenPbrTokens->fuzz_roughness, { AdobeTokens->sheenRoughness, SdfValueTypeNames->Float } },
         { OpenPbrTokens->geometry_coat_normal, { AdobeTokens->coatNormal, SdfValueTypeNames->Float3 } },
         { OpenPbrTokens->geometry_normal, { AdobeTokens->normal, SdfValueTypeNames->Float3 } },
-        { OpenPbrTokens->geometry_opacity, { AdobeTokens->opacity, SdfValueTypeNames->Color3f } },
+        { OpenPbrTokens->geometry_opacity, { AdobeTokens->opacity, SdfValueTypeNames->Float } },
         { OpenPbrTokens->specular_anisotropy, { AdobeTokens->anisotropyLevel, SdfValueTypeNames->Float } },
         { OpenPbrTokens->specular_color, { AdobeTokens->specularEdgeColor, SdfValueTypeNames->Color3f } },
         { OpenPbrTokens->specular_ior, { AdobeTokens->IOR, SdfValueTypeNames->Float } },

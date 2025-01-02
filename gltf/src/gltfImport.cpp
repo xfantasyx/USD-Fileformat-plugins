@@ -324,7 +324,16 @@ importImage(ImportGltfContext& ctx,
     } else if (uriExtension == "webp" || image.mimeType == "image/webp") {
         usdImage.format = ImageFormatWebp;
         usdImage.uri += ".webp";
-    } else {
+    }
+    else if (uriExtension == "tif" || image.mimeType == "image/tif") {
+        usdImage.format = ImageFormatTiff;
+        usdImage.uri += ".tif";
+    } 
+    else if (uriExtension == "dds" || image.mimeType == "image/dds") {
+        usdImage.format = ImageFormatDDS;
+        usdImage.uri += ".dds";
+    } 
+    else {
         TF_DEBUG_MSG(
           FILE_FORMAT_GLTF, "Could not read image with extension %s\n", uriExtension.c_str());
         return -1;

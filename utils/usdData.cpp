@@ -296,6 +296,8 @@ getFormat(const std::string& extension)
         return ImageFormatTiff;
     else if (s == "tif")
         return ImageFormatTiff;
+    else if (s == "dds")
+        return ImageFormatDDS;
     else if (s == "webp")
         return ImageFormatWebp;
     else
@@ -321,6 +323,8 @@ getFormatExtension(ImageFormat format)
             return "tga";
         case ImageFormatTiff:
             return "tiff";
+        case ImageFormatDDS:
+            return "dds";
         case ImageFormatWebp:
             return "webp";
         case ImageFormatUnknown:

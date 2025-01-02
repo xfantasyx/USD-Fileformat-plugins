@@ -250,7 +250,7 @@ _createMaterialXTextureReader(SdfAbstractData* sdfData,
         textureOutput = createShader(sdfData,
                                      parentPath,
                                      TfToken(name.GetString() + "_to_world_space"),
-                                     MtlXTokens->ND_normalmap,
+                                     MtlXTokens->ND_normalmap_float,
                                      "out",
                                      {},
                                      { { "in", textureOutput } });
@@ -341,7 +341,7 @@ _setupMaterialXInput(WriteSdfContext& ctx,
             bool isNormalMap =
               name == OpenPbrTokens->geometry_normal || name == OpenPbrTokens->geometry_coat_normal;
             // geometry_opacity expects a color, but our input opacity is a float input
-            bool convertToColor = name == OpenPbrTokens->geometry_opacity;
+            // bool convertToColor = name == OpenPbrTokens->geometry_opacity;
             SdfPath texResultPath = _createMaterialXTextureReader(ctx.sdfData,
                                                                   parentPath,
                                                                   name,
@@ -349,7 +349,7 @@ _setupMaterialXInput(WriteSdfContext& ctx,
                                                                   stResultPath,
                                                                   textureConnection,
                                                                   isNormalMap,
-                                                                  convertToColor);
+                                                                  false);
 
             inputConnections.emplace_back(name.GetString(), texResultPath);
         }
@@ -361,7 +361,7 @@ _setupMaterialXInput(WriteSdfContext& ctx,
                 // NOTE that here, we are not creating a connection to a material level opacity
                 // input variable do to the type difference.
                 float opacity = input.value.UncheckedGet<float>();
-                inputValues.emplace_back(name.GetString(), VtValue(GfVec3f(opacity)));
+                inputValues.emplace_back(name.GetString(), VtValue(opacity));
             } else {
                 TF_WARN("Expect float value for constant opacity. Got type %s",
                         input.value.GetTypeName().c_str());

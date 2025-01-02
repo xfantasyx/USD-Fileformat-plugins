@@ -1033,7 +1033,7 @@ _writeMaterial(WriteSdfContext& ctx, const SdfPath& parentPath, const Material& 
 void
 _writeImage(const std::string& assetsPath, const ImageAsset& image)
 {
-    std::string filename = assetsPath + "/" + image.uri;
+    std::string filename = assetsPath + "/" + TfGetBaseName(image.uri);
     std::ofstream file(filename, std::ios::out | std::ios::binary);
     if (!file.is_open())
         return;

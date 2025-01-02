@@ -150,7 +150,7 @@ governing permissions and limitations under the License.
     (ND_place2d_vector2) \
     (ND_separate4_vector4) \
     (ND_convert_float_color3) \
-    (ND_normalmap) \
+    (ND_normalmap_float) \
     (ND_adobe_standard_material) \
     (ND_open_pbr_surface_surfaceshader)
 // clang-format on

@@ -228,7 +228,7 @@ readFbx(Fbx& fbx, const std::string& filename, bool onlyMaterials)
     ios->SetBoolProp(IMP_FBX_TEXTURE, true);
     ios->SetBoolProp(IMP_FBX_ANIMATION, !onlyMaterials);
     ios->SetBoolProp(IMP_FBX_MODEL, !onlyMaterials);
-    fbx.loadImages = onlyMaterials;
+    fbx.loadImages = true;
 
     if (!importer->Initialize(filename.c_str(), -1, ios)) {
         FbxString error = importer->GetStatus().GetErrorString();
