@@ -519,6 +519,13 @@ InputTranslator::extractChannel(const std::string& name,
             if (mExportImages) {
                 auto [inImageValid, inImage] = getDecodedImage(in.image);
                 GUARD(inImageValid, "Invalid image");
+
+                if (channelIndex == inImage.channels)
+                {
+                    TF_WARN("Invalid channel index (%d) for input image channels(%d)", channelIndex, inImage.channels);
+                    channelIndex = 0;
+                }
+
                 if (inImage.channels == 1 && newscale == 1.0f && newbias == 0.0f) {
                     // If the source image has a single channel and there isn't a
                     // scale or bias to be applied, we just copy but ensure we set
