@@ -16,7 +16,7 @@ governing permissions and limitations under the License.
 #include <pxr/pxr.h>
 #include <sstream>
 #include <string>
-#include <usdData.h>
+#include <fileformatutils/usdData.h>
 #include <utility>
 
 
@@ -71,8 +71,15 @@ struct Fbx
     ~Fbx();
 };
 
+/*
+ * importImages Indicates whether the fbx should be set to load image data. It should be true if
+ * the images are being written out, and false otherwise
+ *
+ * onlyMaterials Indicates whether the fbx should only load materials. It should only be true if
+ * the file is being loaded just to separately load image textures, and nothing else is being used
+ */
 bool
-readFbx(Fbx& fbx, const std::string& filename, bool onlyMaterials);
+readFbx(Fbx& fbx, const std::string& filename, bool importImages, bool onlyMaterials);
 
 bool
 writeFbx(const ExportFbxOptions& options, const Fbx& fbx, const std::string& filename);

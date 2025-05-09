@@ -12,7 +12,7 @@ governing permissions and limitations under the License.
 #include "fbx.h"
 #include "debugCodes.h"
 #include <algorithm>
-#include <common.h>
+#include <fileformatutils/common.h>
 #include <fbxsdk.h>
 #include <fstream>
 #include <pxr/base/gf/matrix3d.h>
@@ -209,7 +209,7 @@ EmbedReadCBFunction(void* pUserData,
 }
 
 bool
-readFbx(Fbx& fbx, const std::string& filename, bool onlyMaterials)
+readFbx(Fbx& fbx, const std::string& filename, bool importImages, bool onlyMaterials)
 {
     GUARD(fbx.manager != nullptr, "Invalid fbx manager");
 

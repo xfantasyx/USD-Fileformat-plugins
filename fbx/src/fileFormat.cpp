@@ -15,12 +15,14 @@ governing permissions and limitations under the License.
 #include "fbx.h"
 #include "fbxExport.h"
 #include "fbxImport.h"
+#include <mutex>
 
-#include <common.h>
-#include <layerRead.h>
-#include <layerWriteSdfData.h>
-#include <resolver.h>
-#include <usdData.h>
+
+#include <fileformatutils/common.h>
+#include <fileformatutils/layerRead.h>
+#include <fileformatutils/layerWriteSdfData.h>
+#include <fileformatutils/resolver.h>
+#include <fileformatutils/usdData.h>
 
 #include <pxr/usd/usd/usdaFileFormat.h>
 
@@ -117,8 +119,9 @@ UsdFbxFileFormat::Read(SdfLayer* layer, const std::string& resolvedPath, bool me
     {
         const std::lock_guard<std::mutex> lock(mutex); // FBX SDK is not thread safe
         Fbx fbx;
-        GUARD(
-          readFbx(fbx, resolvedPath, false), "Error reading FBX from %s\n", resolvedPath.c_str());
+        GUARD(readFbx(fbx, resolvedPath, options.importImages, false),
+              "Error reading FBX from %s\n",
+              resolvedPath.c_str());
         GUARD(importFbx(options, fbx, usd), "Error translating FBX to USD\n");
     }
     GUARD(writeLayer(

@@ -16,11 +16,11 @@ governing permissions and limitations under the License.
 #include "gltfImport.h"
 
 // utils
-#include <common.h>
-#include <layerRead.h>
-#include <layerWriteSdfData.h>
-#include <resolver.h>
-#include <usdData.h>
+#include <fileformatutils/common.h>
+#include <fileformatutils/layerRead.h>
+#include <fileformatutils/layerWriteSdfData.h>
+#include <fileformatutils/resolver.h>
+#include <fileformatutils/usdData.h>
 
 // USD
 #include <pxr/base/tf/pathUtils.h>
@@ -253,6 +253,9 @@ UsdGltfFileFormat::WriteToFile(const SdfLayer& layer,
 
     // don't set a max on exported joints and weights when reading the USD data
     options.maxMeshInfluenceCount = -1;
+
+    // glTF doesn't support invisible primitives, so we filter them out here
+    options.ignoreInvisible = true;
 
     UsdData usd;
     GUARD(readLayer(options, layer, usd, DEBUG_TAG), "Error reading USD file\n");

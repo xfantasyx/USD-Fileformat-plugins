@@ -13,7 +13,7 @@ governing permissions and limitations under the License.
 #include "debugCodes.h"
 #include "fbx.h"
 #include "fbxImport.h"
-#include <common.h>
+#include <fileformatutils/common.h>
 #include <mutex>
 #include <pxr/base/tf/stopwatch.h>
 #include <pxr/usd/ar/definePackageResolver.h>
@@ -38,7 +38,7 @@ FbxResolver::readCache(const std::string& filename, std::vector<ImageAsset>& ima
     TfStopwatch watch;
     TF_DEBUG_MSG(FBX_PACKAGE_RESOLVER, "START TOTAL: %ld\n", static_cast<long int>(watch.GetMilliseconds()));
     watch.Start();
-    VOID_GUARD(readFbx(fbx, filename, true), "Error reading FBX from %s\n", filename.c_str());
+    VOID_GUARD(readFbx(fbx, filename, true, true), "Error reading FBX from %s\n", filename.c_str());
     watch.Stop();
     TF_DEBUG_MSG(FBX_PACKAGE_RESOLVER, "STOP TOTAL: %ld\n", static_cast<long int>(watch.GetMilliseconds()));
     ImportFbxOptions options;
