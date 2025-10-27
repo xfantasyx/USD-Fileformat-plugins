@@ -137,7 +137,7 @@ AssetCache::addRenderResult(const adobe::usd::sbsar::ParsePathResult& pathResult
     renderResult.computeSize();
     // Before adding a new entry, check the cache size and clean the cache if necessary to ensure
     // there is enough space
-    if (m_size + renderResult.getSize() > getSbsarConfig()->getAssetCacheSize())
+    if (getSbsarConfig()->getAssetCacheSize() > 0 && (m_size + renderResult.getSize() > getSbsarConfig()->getAssetCacheSize()))
         cleanCache();
     renderResult.updateLastAccessTime();
     std::size_t assetCount = renderResult.getAssetCount();

@@ -30,19 +30,13 @@ endif()
 
 if(USD_FILEFORMATS_FORCE_FETCHCONTENT OR USD_FILEFORMATS_FETCH_FMT)
     message(STATUS "Fetching fmt")
-    include(FetchContent)
-    FetchContent_Declare(
-        fmt
+    include(CPM)
+    CPMAddPackage(
+        NAME fmt
         GIT_REPOSITORY "https://github.com/fmtlib/fmt.git"
         GIT_TAG        "10.1.1" # f5e54359df4c26b6230fc61d38aa294581393084
-        OVERRIDE_FIND_PACKAGE
     )
-    FetchContent_MakeAvailable(fmt)
-    if(fmt_POPULATED)
-        set(fmt_FOUND TRUE)
-    elseif(${fmt_FIND_REQUIRED})
-        message(FATAL_ERROR "Could not fetch fmt")
-    endif()
+    set(fmt_FOUND TRUE)
 else()
     if(${fmt_FIND_REQUIRED})
         find_package(fmt CONFIG REQUIRED)

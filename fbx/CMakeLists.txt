@@ -8,7 +8,9 @@ endif()
 find_package(ZLIB REQUIRED)
 find_package(LibXml2 REQUIRED)
 find_package(FBXSDK REQUIRED)
-find_package(GTest REQUIRED)
+if(USD_FILEFORMATS_BUILD_TESTS)
+    find_package(GTest REQUIRED)
+endif()
 
 
 add_subdirectory(src)

@@ -36,21 +36,15 @@ endif()
 
 if(USD_FILEFORMATS_FORCE_FETCHCONTENT OR USD_FILEFORMATS_FETCH_HAPPLY)
     message(STATUS "Fetching Happly")
-    include(FetchContent)
-    FetchContent_Declare(
-        Happly
+    include(CPM)
+    CPMAddPackage(
+        NAME happly
         GIT_REPOSITORY "https://github.com/nmwsharp/happly.git"
         GIT_TAG        "cfa2611550bc7da65855a78af0574b65deb81766"
-        OVERRIDE_FIND_PACKAGE
     )
-    FetchContent_MakeAvailable(Happly)
-    if (happly_POPULATED)
-        set(Happly_FOUND TRUE)
-        add_library(happly::happly INTERFACE IMPORTED)
-        target_include_directories(happly::happly INTERFACE ${happly_SOURCE_DIR})
-    elseif(${Happly_FIND_REQUIRED})
-        message(FATAL_ERROR "Could not fetch Happly")
-    endif()
+    set(Happly_FOUND TRUE)
+    add_library(happly::happly INTERFACE IMPORTED)
+    target_include_directories(happly::happly INTERFACE ${happly_SOURCE_DIR})
 else()
     include(FindPackageHandleStandardArgs)
 

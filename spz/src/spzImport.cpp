@@ -67,12 +67,9 @@ importSpz(const ImportSpzOptions& options, const spz::GaussianCloud& gaussianClo
         if (gaussianCloud.colors.size() < static_cast<size_t>(gaussianCloud.numPoints * 3))
             throw std::runtime_error("Invalid color data size");
         for (size_t i = 0; i < colors.values.size(); i++) {
-            colors.values[i][0] =
-              std::clamp(gaussianCloud.colors[i * 3 + 0] * shC0 + 0.5f, 0.0f, 1.0f);
-            colors.values[i][1] =
-              std::clamp(gaussianCloud.colors[i * 3 + 1] * shC0 + 0.5f, 0.0f, 1.0f);
-            colors.values[i][2] =
-              std::clamp(gaussianCloud.colors[i * 3 + 2] * shC0 + 0.5f, 0.0f, 1.0f);
+            colors.values[i][0] = gaussianCloud.colors[i * 3 + 0] * shC0 + 0.5f;
+            colors.values[i][1] = gaussianCloud.colors[i * 3 + 1] * shC0 + 0.5f;
+            colors.values[i][2] = gaussianCloud.colors[i * 3 + 2] * shC0 + 0.5f;
         }
 
         auto [opacityIndex, opacity] = usd.addOpacitySet(meshIndex);
@@ -115,6 +112,7 @@ importSpz(const ImportSpzOptions& options, const spz::GaussianCloud& gaussianClo
         }
 
         const size_t shDim = gaussianCloud.shDegree * (gaussianCloud.shDegree + 2);
+        const size_t numGsplatsSHCoeffs = shDim * 3;
         if (gaussianCloud.sh.size() < static_cast<size_t>(gaussianCloud.numPoints * shDim * 3))
             throw std::runtime_error("Invalid SH coefficient data size");
         for (std::size_t shColIndex = 0; shColIndex < 3; ++shColIndex) {
@@ -126,10 +124,12 @@ importSpz(const ImportSpzOptions& options, const spz::GaussianCloud& gaussianClo
                 // SPZ stores SH coefficients in a row-major order, where
                 // we need to convert it to a column-major order that we
                 // use for USD.
+                // Also, SPZ stores SH coefficients in an Array-of-Structs (AoS) format,
+                // packing the SH coefficients for each point together, while USD expects 
+                // a Struct-of-Arrays (SoA) format, packing one coefficient for all points together.
                 const size_t spzShIndex = shRowIndex * 3 + shColIndex;
-                const size_t spzShBase = spzShIndex * gaussianCloud.numPoints;
                 for (size_t i = 0; i < shCoeffs.values.size(); i++) {
-                    shCoeffs.values[i] = gaussianCloud.sh[spzShBase + i];
+                    shCoeffs.values[i] = gaussianCloud.sh[i * numGsplatsSHCoeffs + spzShIndex];
                 }
             }
         }

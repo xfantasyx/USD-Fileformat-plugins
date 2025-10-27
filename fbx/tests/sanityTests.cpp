@@ -17,6 +17,10 @@ governing permissions and limitations under the License.
 #include <pxr/usd/usd/prim.h>
 #include <pxr/usd/usd/stage.h>
 
+#include <fstream>
+
+#include "util.h"
+
 TEST(Sanity, LoadCube)
 {
     PXR_NAMESPACE_USING_DIRECTIVE
@@ -26,4 +30,21 @@ TEST(Sanity, LoadCube)
     ASSERT_TRUE(stage);
     UsdPrim mesh = stage->GetPrimAtPath(SdfPath("/SanityCube/Cube"));
     ASSERT_TRUE(mesh);
+}
+
+TEST(Sanity, ExportCube)
+{
+    PXR_NAMESPACE_USING_DIRECTIVE
+
+    FbxScene* scene = getFbxSceneFromUsd("cube.usd");
+    ASSERT_TRUE(scene);
+
+    // Start the recursive traversal from the root node
+    std::vector<std::string> paths = getFbxNodePaths(scene);
+
+    // Check if the expected path exist in the FBX scene
+    ASSERT_TRUE(std::find(paths.begin(), paths.end(), "/RootNode/Cube") != paths.end());
+
+    // Cleanup
+    scene->Destroy();
 }

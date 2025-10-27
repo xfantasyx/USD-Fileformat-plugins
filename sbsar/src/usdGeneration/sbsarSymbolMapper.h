@@ -16,8 +16,9 @@ governing permissions and limitations under the License.
 #include <string>
 
 namespace adobe::usd::sbsar {
-// Represents a mapped symbol, holds both the original
-// substance symbol and the corresponding Usd symbol
+
+/// @brief Represents a mapped symbol, holds both the original
+/// substance symbol and the corresponding Usd symbol
 struct MappedSymbol
 {
     std::string substanceName;
@@ -25,20 +26,21 @@ struct MappedSymbol
     bool invalid();
 };
 
-// Keeps track of mapping of names between substance and USD in a reversible
-// way
-// Guarantees the same Usd Symbol doesn't occur multiple times in the same
-// mapper
+/// @brief Keeps track of mapping of names between substance and USD in a reversible way.
+/// @details Guarantees the same Usd Symbol doesn't occur multiple times in the same mapper.
 class SymbolMapper
 {
   public:
     SymbolMapper();
     virtual ~SymbolMapper();
-    // Ask for a Usd symbol for the argument substance symbol
-    // if the symbol is known, give back the existing mapping
-    // if it's unknown, generate a new mapping with a Usd
-    // compatible name that is not a duplicate of a previously
-    // known usd name in the mapper
+
+    /// @brief Ask for a Usd symbol for the argument substance symbol.
+    /// @details If the symbol is known, gives back the existing mapping.
+    /// If it's unknown, generates a new mapping with a Usd
+    /// compatible name that is not a duplicate of a previously
+    /// known usd name in the mapper.
+    /// @param substanceSymbol The substance symbol to map.
+    /// @return The mapped symbol.
     MappedSymbol GetSymbol(const std::string& substanceSymbol);
 
   private:
@@ -48,4 +50,5 @@ class SymbolMapper
     // Existing usd symbols
     std::set<std::string> usd_symbols;
 };
+
 }

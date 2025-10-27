@@ -10,12 +10,15 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 #pragma once
+
 #include "api.h"
-#include <iosfwd>
+#include <fileformatutils/sdfUtils.h>
+
 #include <pxr/base/tf/staticTokens.h>
 #include <pxr/pxr.h>
 #include <pxr/usd/pcp/dynamicFileFormatInterface.h>
-#include <fileformatutils/sdfUtils.h>
+
+#include <iosfwd>
 #include <string>
 #include <version.h>
 
@@ -31,7 +34,6 @@ TF_DECLARE_WEAK_AND_REF_PTRS(UsdObjFileFormat);
 class ObjData : public FileFormatDataBase
 {
   public:
-    std::string assetsPath;
     bool phong = false;
     TfToken originalColorSpace;
     static ObjDataRefPtr InitData(const SdfFileFormat::FileFormatArguments& args);

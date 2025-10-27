@@ -12,9 +12,9 @@ governing permissions and limitations under the License.
 #include "fbxExport.h"
 #include "debugCodes.h"
 #include <fbxsdk.h>
-#include <fileformatutils/layerWriteShared.h>
 #include <fileformatutils/common.h>
 #include <fileformatutils/images.h>
+#include <fileformatutils/layerWriteShared.h>
 #include <fileformatutils/materials.h>
 #include <fileformatutils/usdData.h>
 
@@ -619,6 +619,60 @@ exportFbxMeshes(ExportFbxContext& ctx)
                 }
             }
 
+            // Tangents
+            if (m.tangents.values.size()) {
+                FbxGeometryElement::EMappingMode tangentMapping;
+                if (!exportFbxMapping(m.tangents.interpolation, tangentMapping)) {
+                    TF_WARN(
+                      "Tangents interpolation: %s not supported, defaulting to byControlPoint\n",
+                      m.tangents.interpolation.GetText());
+                }
+
+                FbxGeometryElementTangent* elementTangent = fbxMesh->CreateElementTangent();
+                elementTangent->SetMappingMode(tangentMapping);
+                for (size_t j = 0; j < m.tangents.values.size(); j++) {
+                    GfVec4f t = m.tangents.values[j];
+                    FbxVector4 tangent = FbxVector4(t[0], t[1], t[2], t[3]);
+                    elementTangent->GetDirectArray().Add(tangent);
+                }
+                if (m.tangents.indices.size()) {
+                    elementTangent->SetReferenceMode(
+                      FbxGeometryElement::EReferenceMode::eIndexToDirect);
+                    for (size_t j = 0; j < m.tangents.indices.size(); j++) {
+                        elementTangent->GetIndexArray().Add(m.tangents.indices[j]);
+                    }
+                } else {
+                    elementTangent->SetReferenceMode(FbxGeometryElement::EReferenceMode::eDirect);
+                }
+            }
+
+            // Bitangents (export as FBX binormals)
+            if (m.bitangents.values.size()) {
+                FbxGeometryElement::EMappingMode binormalMapping;
+                if (!exportFbxMapping(m.bitangents.interpolation, binormalMapping)) {
+                    TF_WARN(
+                      "Bitangents interpolation: %s not supported, defaulting to byControlPoint\n",
+                      m.bitangents.interpolation.GetText());
+                }
+
+                FbxGeometryElementBinormal* elementBinormal = fbxMesh->CreateElementBinormal();
+                elementBinormal->SetMappingMode(binormalMapping);
+                for (size_t j = 0; j < m.bitangents.values.size(); j++) {
+                    GfVec3f b = m.bitangents.values[j];
+                    FbxVector4 binormal = FbxVector4(b[0], b[1], b[2]);
+                    elementBinormal->GetDirectArray().Add(binormal);
+                }
+                if (m.bitangents.indices.size()) {
+                    elementBinormal->SetReferenceMode(
+                      FbxGeometryElement::EReferenceMode::eIndexToDirect);
+                    for (size_t j = 0; j < m.bitangents.indices.size(); j++) {
+                        elementBinormal->GetIndexArray().Add(m.bitangents.indices[j]);
+                    }
+                } else {
+                    elementBinormal->SetReferenceMode(FbxGeometryElement::EReferenceMode::eDirect);
+                }
+            }
+
             // Uvs
             if (m.uvs.values.size()) {
                 FbxGeometryElementUV* elementUvs =
@@ -907,17 +961,14 @@ exportFbxInput(ExportFbxContext& ctx,
         fbxTexture->SetSwapUV(false);
         fbxTexture->UVSet.Set(FbxString(getSTPrimvarAttrToken(input.uvIndex).GetText()));
 
-        if (input.transformScale.IsHolding<GfVec2f>()) {
-            GfVec2f scale = input.transformScale.UncheckedGet<GfVec2f>();
-            fbxTexture->SetScale(scale[0], scale[1]);
+        if (input.uvScale != kDefaultUvScale) {
+            fbxTexture->SetScale(input.uvScale[0], input.uvScale[1]);
         }
-        if (input.transformRotation.IsHolding<float>()) {
-            float rot = input.transformRotation.UncheckedGet<float>();
-            fbxTexture->SetRotation(0.0, 0.0, rot);
+        if (input.uvRotation != kDefaultUvRotation) {
+            fbxTexture->SetRotation(0.0, 0.0, input.uvRotation);
         }
-        if (input.transformTranslation.IsHolding<GfVec2f>()) {
-            GfVec2f trans = input.transformTranslation.UncheckedGet<GfVec2f>();
-            fbxTexture->SetTranslation(trans[0], trans[1]);
+        if (input.uvTranslation != kDefaultUvTranslation) {
+            fbxTexture->SetTranslation(input.uvTranslation[0], input.uvTranslation[1]);
         }
 
         property.ConnectSrcObject(fbxTexture);

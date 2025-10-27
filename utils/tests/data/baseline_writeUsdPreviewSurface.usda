@@ -1,0 +1,243 @@
+#usda 1.0
+(
+    customLayerData = {
+    }
+    defaultPrim = "Scene"
+)
+
+def Xform "Scene"
+{
+    def "Materials"
+    {
+        def Material "GeneralTestMaterial"
+        {
+            float inputs:ambientOcclusion = 0.01 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            color3f inputs:baseColor = (1, 2, 3)
+            float inputs:coatOpacity = 0.55 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            float inputs:coatRoughness = 0.66 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            color3f inputs:emissive = (1, 2, 3)
+            float inputs:height = 1.23 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            float inputs:IOR = 1.55 (
+                customData = {
+                    dictionary range = {
+                        double max = 3
+                        double min = 1
+                    }
+                }
+            )
+            float inputs:metallic = 0.22 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            normal3f inputs:normal = (0.33, 0.33, 0.33)
+            float inputs:opacity = 0.8 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            float inputs:opacityThreshold = 0.75 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            float inputs:roughness = 0.44 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            color3f inputs:specularEdgeColor = (1, 0, 1)
+            int inputs:useSpecularWorkflow = 1 (
+                customData = {
+                    dictionary range = {
+                        int max = 1
+                        int min = 0
+                    }
+                }
+            )
+            token outputs:displacement.connect = </Scene/Materials/GeneralTestMaterial/UsdPreviewSurface/UsdPreviewSurface.outputs:displacement>
+            token outputs:surface.connect = </Scene/Materials/GeneralTestMaterial/UsdPreviewSurface/UsdPreviewSurface.outputs:surface>
+
+            def NodeGraph "UsdPreviewSurface"
+            {
+                def Shader "UsdPreviewSurface"
+                {
+                    uniform token info:id = "UsdPreviewSurface"
+                    float inputs:clearcoat.connect = </Scene/Materials/GeneralTestMaterial.inputs:coatOpacity>
+                    float inputs:clearcoatRoughness.connect = </Scene/Materials/GeneralTestMaterial.inputs:coatRoughness>
+                    color3f inputs:diffuseColor.connect = </Scene/Materials/GeneralTestMaterial.inputs:baseColor>
+                    float inputs:displacement.connect = </Scene/Materials/GeneralTestMaterial.inputs:height>
+                    color3f inputs:emissiveColor.connect = </Scene/Materials/GeneralTestMaterial.inputs:emissive>
+                    float inputs:ior.connect = </Scene/Materials/GeneralTestMaterial.inputs:IOR>
+                    float inputs:metallic.connect = </Scene/Materials/GeneralTestMaterial.inputs:metallic>
+                    normal3f inputs:normal.connect = </Scene/Materials/GeneralTestMaterial.inputs:normal>
+                    float inputs:occlusion.connect = </Scene/Materials/GeneralTestMaterial.inputs:ambientOcclusion>
+                    float inputs:opacity.connect = </Scene/Materials/GeneralTestMaterial.inputs:opacity>
+                    float inputs:opacityThreshold.connect = </Scene/Materials/GeneralTestMaterial.inputs:opacityThreshold>
+                    float inputs:roughness.connect = </Scene/Materials/GeneralTestMaterial.inputs:roughness>
+                    color3f inputs:specularColor.connect = </Scene/Materials/GeneralTestMaterial.inputs:specularEdgeColor>
+                    int inputs:useSpecularWorkflow.connect = </Scene/Materials/GeneralTestMaterial.inputs:useSpecularWorkflow>
+                    token outputs:displacement
+                    token outputs:surface
+                }
+            }
+        }
+
+        def Material "TextureTestMaterial"
+        {
+            asset inputs:baseColorTexture = @textures/color.png@
+            asset inputs:coatOpacityTexture = @textures/color.png@
+            asset inputs:emissiveTexture = @textures/color.png@
+            asset inputs:normalTexture = @textures/normal.png@
+            asset inputs:roughnessTexture = @textures/greyscale.png@
+            token outputs:displacement.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/UsdPreviewSurface.outputs:displacement>
+            token outputs:surface.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/UsdPreviewSurface.outputs:surface>
+
+            def NodeGraph "UsdPreviewSurface"
+            {
+                def Shader "texCoordReader"
+                {
+                    uniform token info:id = "UsdPrimvarReader_float2"
+                    string inputs:varname = "st"
+                    float2 outputs:result
+                }
+
+                def Shader "diffuseColor"
+                {
+                    uniform token info:id = "UsdUVTexture"
+                    asset inputs:file.connect = </Scene/Materials/TextureTestMaterial.inputs:baseColorTexture>
+                    token inputs:sourceColorSpace = "sRGB"
+                    float2 inputs:st.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/texCoordReader.outputs:result>
+                    float3 outputs:rgb
+                }
+
+                def Shader "emissiveColor_stTransform"
+                {
+                    uniform token info:id = "UsdTransform2d"
+                    float2 inputs:in.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/texCoordReader.outputs:result>
+                    float inputs:rotation = 15
+                    float2 inputs:scale = (1.5, 0.75)
+                    float2 inputs:translation = (0.12, 3.45)
+                    float2 outputs:result
+                }
+
+                def Shader "emissiveColor"
+                {
+                    uniform token info:id = "UsdUVTexture"
+                    float4 inputs:bias = (0.1, 0.2, 0.3, 0)
+                    asset inputs:file.connect = </Scene/Materials/TextureTestMaterial.inputs:emissiveTexture>
+                    float4 inputs:scale = (1, 2, 0.5, 1)
+                    token inputs:sourceColorSpace = "sRGB"
+                    float2 inputs:st.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/emissiveColor_stTransform.outputs:result>
+                    token inputs:wrapS = "clamp"
+                    token inputs:wrapT = "mirror"
+                    float3 outputs:rgb
+                }
+
+                def Shader "roughness"
+                {
+                    uniform token info:id = "UsdUVTexture"
+                    asset inputs:file.connect = </Scene/Materials/TextureTestMaterial.inputs:roughnessTexture>
+                    token inputs:sourceColorSpace = "raw"
+                    float2 inputs:st.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/texCoordReader.outputs:result>
+                    float outputs:r
+                }
+
+                def Shader "clearcoat"
+                {
+                    uniform token info:id = "UsdUVTexture"
+                    asset inputs:file.connect = </Scene/Materials/TextureTestMaterial.inputs:coatOpacityTexture>
+                    float2 inputs:st.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/texCoordReader.outputs:result>
+                    float outputs:g
+                }
+
+                def Shader "normal"
+                {
+                    uniform token info:id = "UsdUVTexture"
+                    asset inputs:file.connect = </Scene/Materials/TextureTestMaterial.inputs:normalTexture>
+                    token inputs:sourceColorSpace = "raw"
+                    float2 inputs:st.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/texCoordReader.outputs:result>
+                    float3 outputs:rgb
+                }
+
+                def Shader "UsdPreviewSurface"
+                {
+                    uniform token info:id = "UsdPreviewSurface"
+                    float inputs:clearcoat.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/clearcoat.outputs:g>
+                    color3f inputs:diffuseColor.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/diffuseColor.outputs:rgb>
+                    color3f inputs:emissiveColor.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/emissiveColor.outputs:rgb>
+                    normal3f inputs:normal.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/normal.outputs:rgb>
+                    float inputs:roughness.connect = </Scene/Materials/TextureTestMaterial/UsdPreviewSurface/roughness.outputs:r>
+                    token outputs:displacement
+                    token outputs:surface
+                }
+            }
+        }
+
+        def Material "TransmissionTestMaterial"
+        {
+            float inputs:opacity = 0.45700002 (
+                customData = {
+                    dictionary range = {
+                        double max = 1
+                        double min = 0
+                    }
+                }
+            )
+            token outputs:displacement.connect = </Scene/Materials/TransmissionTestMaterial/UsdPreviewSurface/UsdPreviewSurface.outputs:displacement>
+            token outputs:surface.connect = </Scene/Materials/TransmissionTestMaterial/UsdPreviewSurface/UsdPreviewSurface.outputs:surface>
+
+            def NodeGraph "UsdPreviewSurface"
+            {
+                def Shader "UsdPreviewSurface"
+                {
+                    uniform token info:id = "UsdPreviewSurface"
+                    float inputs:opacity.connect = </Scene/Materials/TransmissionTestMaterial.inputs:opacity>
+                    token outputs:displacement
+                    token outputs:surface
+                }
+            }
+        }
+    }
+}
+

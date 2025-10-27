@@ -76,76 +76,126 @@ displacement → phongSurface::DisplacementColor
 
 Note that PBR materials are not supported on export, only Phong
 
-- Only point, directional, and spot lights are imported. Other light types are exported as point lights.
+- Only point, directional, and spot lights are exported. Other light types are exported as point lights.
 
 - **OBS: The image files used by the UsdPreviewShader node will be extracted from the USDZ file and saved as PNG files in the same folder as the generated fbx. If the source file is USD the files should also be copied from the USD folder into the FBX folder.**
 
 ## File Format Arguments
+
 **Import:**
 
-* `fbxAssetsPath`: Filesystem path where image assets are saved to.
-    By default image assets are not copied, but the generated usd file will resolve them from the original file.
-    The following saves images to the path `myPath` during `UsdStage::Open` and then exports the stage to that same path.
+* `assetsPath`: Filesystem path where image assets are saved to during import. Default is `""`
+
+    By default image textures used by the asset are not copied during import, but are kept in memory and are available
+    via an associated `ArResolver` plugin. By specifying a filesystem location via `assetsPath`, the import process will
+    copy the image textures to that location and provide asset paths to those locations in the generated USD data. This
+    file format argument allows an easy way to export associated images textures to disk when converting an asset to USD.
+
+    This snippet saves image textures to the path at `exportPath` during `Usd.Stage.Open` and then also exports the stage
+    to that same location, so that the USD data and the used images a co-located.
     ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.fbx:SDF_FORMAT_ARGS:fbxAssetsPath=myPath")
-    stage->Export("myPath/cube.usd")
+    from pxr import Usd
+    stage = Usd.Stage.Open("asset.fbx:SDF_FORMAT_ARGS:assetsPath=exportPath")
+    stage.Export("exportPath/asset.usd")
     ```
+
+* `fbxAssetsPath`: Deprecated in favor of `assetsPath`.
+
+* `writeUsdPreviewSurface`: Generate a UsdPreviewSurface based network for each material. Default is `true`
+
+    UsdPreviewSurface and its associated nodes are a universally understood USD material description
+    and all application should support them. The PBR capabilities are limited.
+
+* `writeASM`: Generate a ASM (Adobe Standard Material) based network for each material. Default is `true`
+
+    ASM is a standard supported by many Adobe applications with richer support for PBR capabilities.
+    It will be superseded by OpenPBR in the near future.
+
+* `writeOpenPBR`: Generate a OpenPBR based material network for each material. Default is `false`
+
+    OpenPBR is a new industry standard that will have wide spread support, but is still in its infancy.
+    The material network uses `MaterialX` nodes to express individual operations and has an `OpenPBR` surface,
+    which has rich support for PBR oriented materials.
 
 * `fbxPhong`: Forces phong to PBR material conversion.
     By default turned off: the plugin imports the diffuse component only, without specularities.
     The following converts PBR to phong.
     ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.fbx:SDF_FORMAT_ARGS:fbxPhong=true")
+    from pxr import Usd
+    stage = Usd.Stage.Open("cube.fbx:SDF_FORMAT_ARGS:fbxPhong=true")
     stage.Export("cube.usd")
     ```
-    The phong to PBR conversion follows https://docs.microsoft.com/en-us/azure/remote-rendering/reference/material-mapping. Keep in mind it is a lossy conversion.
+    The phong to PBR conversion follows https://docs.microsoft.com/en-us/azure/remote-rendering/reference/material-mapping.
+    Keep in mind it is a lossy conversion.
 
-* `fbxOriginalColorSpace`: USD uses linear colorspace, however, FBX colorspace could be either linear or sRGB.
-    The user can set which one the data was in during import.  If the data is in sRGB it will be converted to linear while in USD. Exporting will also consider the original color space. See Export -> outputColorSpace for details.
+* `fbxOriginalColorSpace`: Convert colors from sRGB to linear. Default: `""`
+
+    USD uses a linear colorspace, however, FBX colorspace could be either linear or sRGB.
+    The user can set which one the data was in during import.  If the data is in `sRGB` it will be converted to linear
+    for USD. Exporting will also consider the original color space. See Export -> `outputColorSpace` for details.
 
     ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.fbx:SDF_FORMAT_ARGS:fbxOriginalColorSpace=sRGB")
+    from pxr import Usd
+    stage = Usd.Stage.Open("cube.fbx:SDF_FORMAT_ARGS:fbxOriginalColorSpace=sRGB")
     ```
 
-* `fbxAnimationTracks`: Import multiple animation stacks. Default is `false`
-    The default is that only the first animation stack is imported.
-    It is only recommended to use this parameter in order to convert from FBX to another format, such as fbx.
-    It is not recommended to export a .usd file after importing a file with this parameter set.
+* `fbxAnimationStacks`: Import multiple animation stacks. Default is `false`
+
+    By default only the first animation stack is imported.
+    It is only recommended to use this parameter in order to convert from FBX to another format that supports multiple
+    animation tracks, such as GLTF. It is not recommended to export a .usd file after importing a file with this parameter
+    set, as there is no standard way to encode this information.
+
+    The following allows additional animation stacks to be imported, and adds metadata to USD to encode where each stack
+    begins and ends. The exporter can then read this metadata to export the stacks properly.
     ```
-    The following allows additional animation stacks to be imported, and adds metadata to USD to encode where
-    each stack begins and ends. The exporter can then read this metadata to export the stacks properly.
+    from pxr import Usd
+    stage = Usd.Stage.Open("cube.fbx:SDF_FORMAT_ARGS:fbxAnimationStacks=true")
+    stage.Export("myPath/cube.gltf")
     ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.fbx:SDF_FORMAT_ARGS:fbxAnimationStacks=true")
-    stage->Export("myPath/cube.fbx")
+* `triangulateMeshes`: Use edge information if present to triangulate quads. Default is `true`
+
+    FBX supports quad meshes and there may be additional edge information that can be used to guide the triangulation
+    on import. The flag controls whether the triangulation should be done at all.
+
+    ```
+    from pxr import Usd
+    stage = Usd.Stage.Open("cube.fbx:SDF_FORMAT_ARGS:triangulateMeshes=false")
     ```
 
 **Export:**
 
-* `embedImages` Embed images in the exported fbx file instead of as separate files. Default is `false`.
-    The following exports to `fbx` and embeds images:
-    ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.usd");
-    SdfLayer::FileFormatArguments args = { {"embedImages", "true"} };
-    stage->Export("cube.fbx", false, args);
-    ```
-* `outputColorSpace`: USD uses linear colorspace, however, the original FBX colorspace could be either linear or sRGB.
-    If fbxOriginalColorSpace was set the fileformat plugin will use it when exporting unless outputColorSpace is specified.
+* `embedImages`: Embed images in the exported FBX file instead of as separate files. Default is `false`.
 
-    Order or precendence on export (Note: the plugin assumes usd data is linear)
-    1. If outputColorSpace=linear, the usd color data is exported as is.
-    2. If outputColorSpace=sRGB, the usd color data is converted to sRGB on export
-    3. If outputColorSpace is not set and fbxOriginalColorSpace is known, it will export the color data in the original format
-    4. If outputColorSpace is not set and fbxOriginalColorSpace is not known, it will export the color data as is.
+    The following exports to FBX and embeds images:
+    ```
+    from pxr import Usd
+    stage = Usd.Stage.Open("cube.usd");
+    stage.Export("cube.fbx", args={ "embedImages": "true" });
+    ```
+
+* `outputColorSpace`: Convert colors from linear to sRGB. Default: `""`
+
+    USD uses linear colorspace, however, the original FBX colorspace could be either linear or sRGB.
+    If `fbxOriginalColorSpace` was set the fileformat plugin will use it when exporting unless outputColorSpace is specified.
+
+    Order or precendence on export (Note: the plugin assumes USD data is linear)
+    1. If `outputColorSpace=linear`, the USD color data is exported as is.
+    2. If `outputColorSpace=sRGB`, the USD color data is converted to sRGB on export
+    3. If `outputColorSpace` is not set and `fbxOriginalColorSpace` is known, it will export the color data in the original format
+    4. If `outputColorSpace` is not set and `fbxOriginalColorSpace` is not known, it will export the color data as is.
 
     Example:
     ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.fbx:SDF_FORMAT_ARGS:fbxOriginalColorSpace=sRGB")
+    from pxr import Usd
+    stage = Usd.Stage.Open("cube.fbx:SDF_FORMAT_ARGS:fbxOriginalColorSpace=sRGB")
 
     # round trip the asset using the original colorspace
     stage.Export("round_trip_original_cube_srgb.fbx")  // exported file will have sRGB colorspace
 
     # round trip the asset overriding the original colorspace
-    stage.Export("round_trip_original_cube_linear.fbx:SDF_FORMAT_ARGS:outputColorSpace=linear")  // exported file will have linear colorspace
+    # the exported file will have a linear colorspace
+    stage.Export("round_trip_original_cube_linear.fbx", args={ "outputColorSpace": "linear" } )
     ```
 
 ## Debug codes

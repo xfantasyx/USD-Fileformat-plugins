@@ -66,8 +66,10 @@ The following dependencies are needed:
 * Install python and the following pip components: `pyside6`, `pyopengl`.
 * Build and install USD entering in a terminal (in windows a x64 Native Tools Command prompt):
     ```
-    python <USD_SOURCE_PATH>/build_scripts/build_usd.py <USD_INSTALL_PATH> --draco --openimageio --build-variant release
+    python <USD_SOURCE_PATH>/build_scripts/build_usd.py <USD_INSTALL_PATH> --onetbb --no-examples --draco --openimageio --build-variant release
     ```
+
+    `--no-examples` is needed to omit the example plugin usdObj that ships with USD from the install, as it will conflict with our usdObj plugin.
 
     Add `--build-target universal` for universal binaries in macos.
 

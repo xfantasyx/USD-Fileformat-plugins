@@ -92,6 +92,15 @@ struct KeyVtValuePair
       , second(value)
     {
     }
+
+    // Convenient constructor to create the key from a TfToken and the VtValue from an arbitrarily
+    // typed value
+    template<typename T>
+    KeyVtValuePair(const PXR_NS::TfToken& key, const T& value)
+      : first(key.GetString())
+      , second(value)
+    {
+    }
 };
 
 struct InputTypePair
@@ -174,18 +183,17 @@ createShader(PXR_NS::SdfAbstractData* data,
              const InputConnections& inputConnections = {},
              const InputColorSpaces& inputColorSpaces = {});
 
-using TokenToSdfValueTypeMap = std::unordered_map<PXR_NS::TfToken, PXR_NS::SdfValueTypeName, PXR_NS::TfToken::HashFunctor>;
+using TokenToSdfValueTypeMap =
+  std::unordered_map<PXR_NS::TfToken, PXR_NS::SdfValueTypeName, PXR_NS::TfToken::HashFunctor>;
 
 struct ShaderInfo
 {
     TokenToSdfValueTypeMap inputTypes;
     TokenToSdfValueTypeMap outputTypes;
 
-    PXR_NS::SdfValueTypeName
-    getInputType(const PXR_NS::TfToken& inputName) const;
+    PXR_NS::SdfValueTypeName getInputType(const PXR_NS::TfToken& inputName) const;
 
-    PXR_NS::SdfValueTypeName
-    getOutputType(const PXR_NS::TfToken& outputName) const;
+    PXR_NS::SdfValueTypeName getOutputType(const PXR_NS::TfToken& outputName) const;
 };
 
 // Table of shaders with input and outputs and their respective types
@@ -193,46 +201,41 @@ struct ShaderInfo
 // The data here is essentially a mini form of the shader schemas. If we're concerned about this
 // staying up-to-date we could investigate gathering this information at run-time via the
 // shader definition registry (Sdr) module. Unfortunate, the ASM terminal nodes are not found there.
-class ShaderRegistry {
-public:
-    static ShaderRegistry&
-    getInstance() {
+class ShaderRegistry
+{
+  public:
+    static ShaderRegistry& getInstance()
+    {
         static ShaderRegistry m_instance;
         return m_instance;
     }
 
     /// Return the shader info tokens
-    const std::map<PXR_NS::TfToken, ShaderInfo>&
-    getShaderInfos() const {
-        return m_shaderInfos;
-    }
+    const std::map<PXR_NS::TfToken, ShaderInfo>& getShaderInfos() const { return m_shaderInfos; }
 
     /// Given a token for a material input, return a pointer (possibly null) to the range
-    const MinMaxVtValuePair*
-    getMaterialInputRange(const PXR_NS::TfToken& input) const {
+    const MinMaxVtValuePair* getMaterialInputRange(const PXR_NS::TfToken& input) const
+    {
         auto it = m_inputRanges.find(input);
         return (it == m_inputRanges.cend()) ? nullptr : &(it->second);
     }
 
     /// Return UsdPreviewSurface shader inputs to material inputs map
-    const InputToMaterialInputTypeMap&
-    getUsdPreviewSurfaceInputRemapping() const {
+    const InputToMaterialInputTypeMap& getUsdPreviewSurfaceInputRemapping() const
+    {
         return m_usdPreviewSurfaceInputRemapping;
     }
 
     /// Return ASM shader inputs to material inputs map
-    const InputToMaterialInputTypeMap&
-    getAsmInputRemapping() const {
-        return m_asmInputRemapping;
-    }
+    const InputToMaterialInputTypeMap& getAsmInputRemapping() const { return m_asmInputRemapping; }
 
     /// Return MaterialX shader inputs to material inputs map
-    const InputToMaterialInputTypeMap&
-    getMaterialXInputRemapping() const {
-        return m_materialXInputRemapping;
+    const InputToMaterialInputTypeMap& getOpenPbrInputRemapping() const
+    {
+        return m_openPbrInputRemapping;
     }
 
-private:
+  private:
     ShaderRegistry();
     ~ShaderRegistry() = default;
 
@@ -241,10 +244,11 @@ private:
     ShaderRegistry& operator=(const ShaderRegistry&) = delete;
 
     std::map<PXR_NS::TfToken, ShaderInfo> m_shaderInfos;
-    std::unordered_map<PXR_NS::TfToken, MinMaxVtValuePair, PXR_NS::TfToken::HashFunctor> m_inputRanges;
+    std::unordered_map<PXR_NS::TfToken, MinMaxVtValuePair, PXR_NS::TfToken::HashFunctor>
+      m_inputRanges;
     InputToMaterialInputTypeMap m_usdPreviewSurfaceInputRemapping;
     InputToMaterialInputTypeMap m_asmInputRemapping;
-    InputToMaterialInputTypeMap m_materialXInputRemapping;
+    InputToMaterialInputTypeMap m_openPbrInputRemapping;
 };
 
 }

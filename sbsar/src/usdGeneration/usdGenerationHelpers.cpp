@@ -219,6 +219,8 @@ const std::string uv_rotation_input("uvrotation");
 const std::string uv_translation_input("uvtranslation");
 
 const std::string uv_channel_name("uvChannelName");
+const std::string uv_wrap_s_name("uvWrapS");
+const std::string uv_wrap_t_name("uvWrapT");
 
 const std::string proceduralParameterPrefix("procedural_sbsar:");
 
@@ -253,7 +255,7 @@ guessGraphType(const SubstanceAir::GraphDesc& graphDesc)
         }
     }
     // Check for light
-    if (hasUsage("environment", graphDesc)) {
+    if (hasUsage("environment", graphDesc) || hasUsage("panorama", graphDesc)) {
         return GraphType::Light;
     }
     // Didn't find anything relevant
@@ -263,7 +265,7 @@ guessGraphType(const SubstanceAir::GraphDesc& graphDesc)
 std::pair<std::string, std::string>
 getDefaultValueNames(const std::string& channelName)
 {
-    return { channelName + "_default", channelName + "_textureInfluence" };
+    return { channelName, channelName + "TextureInfluence" };
 }
 
 std::string
@@ -382,6 +384,22 @@ adjustNormalFormatInput(const SubstanceAir::string& identifier,
     return false;
 }
 
+JsValue
+applyDefaultNormalFormatInput(const SubstanceAir::GraphDesc& graphDesc, const JsValue& jsParams)
+{
+    bool hasNormalFormatInput = hasInput(normalFormatParamName, graphDesc);
+
+    if (hasNormalFormatInput) {
+        auto normalFormat = determineNormalFormat(jsParams);
+        if (normalFormat == NormalFormat::Unknown) {
+            auto jsObject = jsParams.GetJsObject();
+            jsObject[normalFormatParamName] = JsValue(1); // 1 is OpenGL
+            return JsValue(jsObject);
+        }
+    }
+    return jsParams;
+}
+
 NormalFormat
 getDefaultNormalFormat(const SubstanceAir::GraphDesc& graphDesc)
 {
@@ -469,7 +487,7 @@ generateSbsarInfoPath(const std::string& usage,
 std::string
 getTextureAssetName(const std::string& usage)
 {
-    return usage + "_texture";
+    return usage + "Texture";
 }
 
 MappedSymbol

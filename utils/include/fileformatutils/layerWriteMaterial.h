@@ -20,13 +20,13 @@ namespace adobe::usd {
 USDFFUTILS_API void
 writeUsdPreviewSurface(WriteSdfContext& ctx,
                        const PXR_NS::SdfPath& materialPath,
-                       const Material& material,
+                       const OpenPbrMaterial& material,
                        MaterialInputs& materialInputs);
 
 USDFFUTILS_API void
 writeAsmMaterial(WriteSdfContext& ctx,
                  const PXR_NS::SdfPath& materialPath,
-                 const Material& material,
+                 const OpenPbrMaterial& material,
                  MaterialInputs& materialInputs);
 
 }

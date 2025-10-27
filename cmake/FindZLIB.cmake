@@ -4,7 +4,7 @@
 Finds or fetches the ZLIB library.
 If USD_FILEFORMATS_FORCE_FETCHCONTENT or USD_FILEFORMATS_FETCH_ZLIB are 
 TRUE, ZLIB will be fetched. Otherwise it will be searched via find commands.
-The search is hinted to look into pxr_DIR, but can be overriden by setting
+The search is hinted to look into pxr_ROOT, but can be overriden by setting
 ZLIB_ROOT.
 
 
@@ -42,50 +42,54 @@ endif()
 
 if(USD_FILEFORMATS_FORCE_FETCHCONTENT OR USD_FILEFORMATS_FETCH_ZLIB)
     message(STATUS "Fetching ZLIB")
-    include(FetchContent)
-    FetchContent_Declare(
-        ZLIB
+    include(CPM)
+    CPMAddPackage(
+        NAME ZLIB
         GIT_REPOSITORY "https://github.com/madler/zlib.git"
         GIT_TAG        "cacf7f1d4e3d44d871b605da3b647f07d718623f" # /tag/v1.2.11
-        OVERRIDE_FIND_PACKAGE
     )
-    FetchContent_MakeAvailable(ZLIB)
-    if(zlib_POPULATED)
-        set(ZLIB_FOUND TRUE)
-        add_library(ZLIB::ZLIB ALIAS zlib)
-    elseif(${ZLIB_FIND_REQUIRED})
-        message(FATAL_ERROR "Could not fetch ZLIB")
-    endif()
+    set(ZLIB_FOUND TRUE)
+    add_library(ZLIB::ZLIB ALIAS zlib)
+    # Create an export set to make sure the libxml2 export set
+    # doesn't complain
+    install(TARGETS zlib
+        EXPORT zlib_export
+        DESTINATION lib
+        )
+    install(EXPORT zlib_export
+        DESTINATION lib
+        FILE zlib.cmake
+        )
 else()
     include(SelectLibraryConfigurations)
     include(FindPackageHandleStandardArgs)
 
-    if (UNIX AND NOT APPLE)
+    if (UNIX OR APPLE)
       find_path(ZLIB_INCLUDE_DIR
-          HINTS ${pxr_DIR}/include
+          HINTS ${pxr_ROOT}/include
           NAMES zlib.h
       )
       find_library(ZLIB_LIBRARY_DEBUG
-          HINTS ${pxr_DIR}/lib
+          HINTS ${pxr_ROOT}/lib
           NAMES z zlib zlibd
       )
       find_library(ZLIB_LIBRARY_RELEASE
-          HINTS ${pxr_DIR}/lib
+          HINTS ${pxr_ROOT}/lib
           NAMES z zlib
       )
     else()
       find_path(ZLIB_INCLUDE_DIR
-          HINTS ${pxr_DIR}/include
+          HINTS ${pxr_ROOT}/include
           NO_CMAKE_SYSTEM_PATH # otherwise it always finds the system one
           NAMES zlib.h
       )
       find_library(ZLIB_LIBRARY_DEBUG
-          HINTS ${pxr_DIR}/lib
+          HINTS ${pxr_ROOT}/lib
           NO_CMAKE_SYSTEM_PATH # otherwise it always finds the system one
           NAMES z zlib zlibd
       )
       find_library(ZLIB_LIBRARY_RELEASE
-          HINTS ${pxr_DIR}/lib
+          HINTS ${pxr_ROOT}/lib
           NO_CMAKE_SYSTEM_PATH # otherwise it always finds the system one
           NAMES z zlib
       )

@@ -47,6 +47,10 @@ jobs:
       matrix: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
     name: build (${{ matrix.os }}-${{ matrix.usd_version }}-${{ matrix.config }})
     steps:
+      - uses: lukka/get-cmake@latest
+        with:
+            cmakeVersion: "~3.26.0"
+
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Setup Python

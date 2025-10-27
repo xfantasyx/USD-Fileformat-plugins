@@ -73,8 +73,7 @@ void
 SbsarConfig::setAssetCacheSize(std::size_t size)
 {
     if (size == 0) {
-        TF_WARN("SbsarConfig: Asset cache size cannot be 0");
-        return;
+        TF_STATUS("SbsarConfig: Asset cache size is 0, which means the cache is unlimited and never cleared!");
     }
     m_assetCacheSize = size;
 }

@@ -60,6 +60,14 @@ governing permissions and limitations under the License.
 
 using namespace PXR_NS;
 
+#if defined(_WIN32) && !defined(__CYGWIN__)
+    #define ftell64 _ftelli64
+    #define fseek64 _fseeki64
+#else
+    #define ftell64 ftello
+    #define fseek64 fseeko
+#endif
+
 namespace adobe::usd {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -201,16 +209,32 @@ readFileContents(const std::string& filename, std::vector<char>& buffer)
     if (!file) {
         return false;
     }
-    fseek(file, 0, SEEK_END);
-    int length = ftell(file);
+    fseek64(file, 0, SEEK_END);
+    long long length = ftell64(file);
     if (length < 0) {
         TF_WARN("Unable to read file %s");
         return false;
     } else {
-        fseek(file, 0, SEEK_SET);
+        fseek64(file, 0, SEEK_SET);
         buffer.resize(length + 1);
-        fread(buffer.data(), length, 1, file);
+
+        // fread does not guarantee that all data will be read in one call. Iterate over read
+        // calls until either an error has occured or the entire file has been read.
+        long long total_read = 0;
+        char* data = buffer.data();
+        while (total_read < length) {
+            size_t current_read = fread(data + total_read, 1, length - total_read, file);
+            if (feof(file)) {
+                break;
+            }
+            if (ferror(file)) {
+                TF_WARN("failed to read file");
+                break;
+            }
+            total_read += current_read;
+        }
         buffer[length] = '\0';
+
         fclose(file);
         return true;
     }
@@ -279,6 +303,23 @@ nextFloat3(const char*& p, const char* end, GfVec3f& x)
 {
     return nextFloat(p, end, x[0]) && nextFloat(p, end, x[1]) && nextFloat(p, end, x[2]);
 }
+
+/// Helper parsing function. `p` is the moving pointer into the data. allows for arguments to have 1 or three values
+bool
+nextFloat1or3(const char*& p, const char* end, GfVec3f& x)
+{
+    if (nextFloat(p, end, x[0])) {
+        if (nextFloat(p, end, x[1])) {
+            return nextFloat(p, end, x[2]);
+        }
+        else {
+            x[2] = x[1] = x[0];
+            return true;
+        }
+    }
+    return false;
+}
+
 
 /// Helper parsing function. `p` is the moving pointer into the data.
 bool
@@ -1309,6 +1350,7 @@ readObjMtl(Obj& obj,
                 }
             } else {
                 nextSpacedText(p, end, map.filename);
+                std::replace(map.filename.begin(), map.filename.end(), '\\', '/');
                 map.image = addImage(obj, map.filename, imageMap, parentPath, readImages);
                 map.defined = map.image != -1;
                 break;
@@ -1345,8 +1387,8 @@ readObjMtl(Obj& obj,
                     TF_WARN("MTL parsing error on line %d, after Ks: expected 3 floats", line);
                 }
             } else if (checkWord(p, end, ke)) {
-                if (!nextFloat3(p, end, m->ke)) {
-                    TF_WARN("MTL parsing error on line %d, after Ke: expected 3 floats", line);
+                if (!nextFloat1or3(p, end, m->ke)) {
+                    TF_WARN("MTL parsing error on line %d, after Ke: expected 1 or 3 floats", line);
                 }
             } else if (checkWord(p, end, tf)) {
                 if (!nextFloat3(p, end, m->tf)) {

@@ -322,20 +322,8 @@ InputTranslator::translateToSingleAffine(const std::string& name,
         out = in;
 
         // apply scale and bias to source scale and bias
-        GfVec4f srcScale = in.scale.GetWithDefault<GfVec4f>(GfVec4f(1.0f));
-        GfVec4f srcBias = in.bias.GetWithDefault<GfVec4f>(GfVec4f(0.0f));
-        GfVec4f newscale = scale * srcScale;
-        GfVec4f newbias = scale * srcBias + GfVec4f(bias);
-        if (newscale != GfVec4f(1.0f)) {
-            out.scale = newscale;
-        } else {
-            out.scale = VtValue();
-        }
-        if (newbias != GfVec4f(0.0f)) {
-            out.bias = newbias;
-        } else {
-            out.bias = VtValue();
-        }
+        out.scale = scale * in.scale;
+        out.bias = scale * in.bias + GfVec4f(bias);
         return true;
     }
     return false;
@@ -423,41 +411,33 @@ InputTranslator::translateFactor(const Input& in,
         translateDirect(in, out, intermediate);
         float f = factor.value.GetWithDefault(1.0f);
         if (f != 1.0f) {
-            if (out.scale.IsHolding<GfVec4f>()) {
-                GfVec4f scale = out.scale.UncheckedGet<GfVec4f>();
-                scale *= f;
-                out.scale = scale;
-            } else {
-                out.scale = GfVec4f(f);
-            }
+            out.scale *= f;
         }
     } else if (factor.image >= 0) {
         // factor is an image and the in input is a constant value
         translateDirect(factor, out, intermediate);
-        GfVec4f scale = out.scale.GetWithDefault(GfVec4f(1.0f));
         if (in.value.IsHolding<float>()) {
             float f = in.value.UncheckedGet<float>();
-            scale *= f;
+            out.scale *= f;
         } else if (in.value.IsHolding<GfVec2f>()) {
             const GfVec2f& v = in.value.UncheckedGet<GfVec2f>();
-            scale[0] *= v[0];
-            scale[1] *= v[1];
+            out.scale[0] *= v[0];
+            out.scale[1] *= v[1];
         } else if (in.value.IsHolding<GfVec3f>()) {
             const GfVec3f& v = in.value.UncheckedGet<GfVec3f>();
-            scale[0] *= v[0];
-            scale[1] *= v[1];
-            scale[2] *= v[2];
+            out.scale[0] *= v[0];
+            out.scale[1] *= v[1];
+            out.scale[2] *= v[2];
         } else if (in.value.IsHolding<GfVec4f>()) {
             const GfVec4f& v = in.value.UncheckedGet<GfVec4f>();
-            scale[0] *= v[0];
-            scale[1] *= v[1];
-            scale[2] *= v[2];
-            scale[3] *= v[3];
+            out.scale[0] *= v[0];
+            out.scale[1] *= v[1];
+            out.scale[2] *= v[2];
+            out.scale[3] *= v[3];
         } else {
             TF_DEBUG_MSG(FILE_FORMAT_UTIL,
                          "translateFactor in input is not holding a float value\n");
         }
-        out.scale = scale;
     } else {
         // Both inputs are constant values
         if (factor.value.IsHolding<float>()) {
@@ -499,11 +479,9 @@ InputTranslator::extractChannel(const std::string& name,
         return true;
     }
 
-    GfVec4f srcScale = in.scale.GetWithDefault<GfVec4f>(GfVec4f(1.0f));
-    GfVec4f srcBias = in.bias.GetWithDefault<GfVec4f>(GfVec4f(0.0f));
     // apply scale and bias to source channel scale and bias
-    float newscale = scale * srcScale[channelIndex];
-    float newbias = scale * srcBias[channelIndex] + bias;
+    float newscale = scale * in.scale[channelIndex];
+    float newbias = scale * in.bias[channelIndex] + bias;
 
     if (in.image >= 0) {
         const ImageAsset& inImageAsset = mImagesSrc[in.image];
@@ -525,8 +503,8 @@ InputTranslator::extractChannel(const std::string& name,
                     bool result = translateDirect(in, out, false);
                     if (result) {
                         out.channel = AdobeTokens->r;
-                        out.scale = VtValue();
-                        out.bias = VtValue();
+                        out.scale = kDefaultTexScale;
+                        out.bias = kDefaultTexBias;
                     }
                     return result;
                 } else {
@@ -555,8 +533,8 @@ InputTranslator::extractChannel(const std::string& name,
     }
 
     // Clear the scale and bias since it was applied to the pixel values and constants
-    out.scale = VtValue();
-    out.bias = VtValue();
+    out.scale = kDefaultTexScale;
+    out.bias = kDefaultTexBias;
     return true;
 }
 
@@ -602,8 +580,8 @@ InputTranslator::translateAffine(const std::string& name,
     }
 
     // Clear the scale and bias since it was applied to the pixel values and the constants
-    out.scale = VtValue();
-    out.bias = VtValue();
+    out.scale = kDefaultTexScale;
+    out.bias = kDefaultTexBias;
     return true;
 }
 
@@ -835,19 +813,17 @@ bool
 InputTranslator::translateOpacity2Transparency(const Input& opacity, Input& transparency)
 {
     if (opacity.image >= 0) {
-        GfVec4f srcScale = opacity.scale.GetWithDefault<GfVec4f>(GfVec4f(1.0f));
-        GfVec4f srcBias = opacity.bias.GetWithDefault<GfVec4f>(GfVec4f(0.0f));
         int channelIndex = token2Channel(opacity.channel);
         if (channelIndex < 0)
             channelIndex = 0;
-        float newscale = -1.0f * srcScale[channelIndex];
-        float newbias = 1.0 - srcBias[channelIndex];
+        float newscale = -1.0f * opacity.scale[channelIndex];
+        float newbias = 1.0 - opacity.bias[channelIndex];
 
         // if there is already an inversion applied, we don't need to do anything
         if (newscale == 1.0f && newbias == 0.0f) {
             bool result = translateDirect(opacity, transparency, false);
-            transparency.scale = VtValue();
-            transparency.bias = VtValue();
+            transparency.scale = kDefaultTexScale;
+            transparency.bias = kDefaultTexBias;
             return result;
         } else {
             // invert the source scale/bias and apply to source opacity image to get new
@@ -886,23 +862,28 @@ InputTranslator::translateAmbient2Occlusion(const Input& ambient, Input& occlusi
 
 void
 _collect2DTransformValues(const Input& input,
-                          std::vector<VtValue>& rotations,
-                          std::vector<VtValue>& scales,
-                          std::vector<VtValue>& translations)
+                          std::vector<float>& rotations,
+                          std::vector<GfVec2f>& scales,
+                          std::vector<GfVec2f>& translations)
 {
     // We are only interested in 2d transform values when there is a texture
     if (input.image >= 0) {
-        rotations.push_back(input.transformRotation);
-        scales.push_back(input.transformScale);
-        translations.push_back(input.transformTranslation);
+        rotations.push_back(input.uvRotation);
+        scales.push_back(input.uvScale);
+        translations.push_back(input.uvTranslation);
     }
 }
 
+template<typename T>
 bool
-_valuesAreEqual(const std::vector<VtValue>& values)
+_valuesAreEqual(const std::vector<T>& values)
 {
+    if (values.empty()) {
+        return true;
+    }
+    T firstValue = values[0];
     for (size_t i = 1; i < values.size(); ++i) {
-        if (values[0] != values[i])
+        if (firstValue != values[i])
             return false;
     }
     return true;
@@ -1000,32 +981,14 @@ InputTranslator::translateMix(const std::string& name,
         out.wrapS = AdobeTokens->repeat;
         out.wrapT = AdobeTokens->repeat;
         out.colorspace = colorspace;
-        if (!in0.scale.IsEmpty() || !in1.scale.IsEmpty() || !in2.scale.IsEmpty() ||
-            !in3.scale.IsEmpty()) {
-            float scale0 =
-              in0.scale.IsHolding<GfVec4f>() ? in0.scale.UncheckedGet<GfVec4f>()[0] : 1;
-            float scale1 =
-              in1.scale.IsHolding<GfVec4f>() ? in1.scale.UncheckedGet<GfVec4f>()[1] : 1;
-            float scale2 =
-              in2.scale.IsHolding<GfVec4f>() ? in2.scale.UncheckedGet<GfVec4f>()[2] : 1;
-            float scale3 =
-              in3.scale.IsHolding<GfVec4f>() ? in3.scale.UncheckedGet<GfVec4f>()[3] : 1;
-            out.scale = GfVec4f(scale0, scale1, scale2, scale3);
-        }
-        if (!in0.bias.IsEmpty() || !in1.bias.IsEmpty() || !in2.bias.IsEmpty() ||
-            !in3.bias.IsEmpty()) {
-            float bias0 = in0.bias.IsHolding<GfVec4f>() ? in0.bias.UncheckedGet<GfVec4f>()[0] : 0;
-            float bias1 = in1.bias.IsHolding<GfVec4f>() ? in1.bias.UncheckedGet<GfVec4f>()[1] : 0;
-            float bias2 = in2.bias.IsHolding<GfVec4f>() ? in2.bias.UncheckedGet<GfVec4f>()[2] : 0;
-            float bias3 = in3.bias.IsHolding<GfVec4f>() ? in3.bias.UncheckedGet<GfVec4f>()[3] : 0;
-            out.bias = GfVec4f(bias0, bias1, bias2, bias3);
-        }
+        out.scale = GfVec4f(in0.scale[0], in1.scale[1], in2.scale[2], in3.scale[3]);
+        out.bias = GfVec4f(in0.bias[0], in1.bias[1], in2.bias[2], in3.bias[3]);
 
         // collect all the 2d transforms for each input into separate arrays so we can
         // check each set for equality and then assign to the output or issue a warning.
-        std::vector<PXR_NS::VtValue> rotations;
-        std::vector<PXR_NS::VtValue> scales;
-        std::vector<PXR_NS::VtValue> translations;
+        std::vector<float> rotations;
+        std::vector<GfVec2f> scales;
+        std::vector<GfVec2f> translations;
         rotations.reserve(4);
         scales.reserve(4);
         translations.reserve(4);
@@ -1035,19 +998,25 @@ InputTranslator::translateMix(const std::string& name,
         _collect2DTransformValues(in3, rotations, scales, translations);
 
         if (_valuesAreEqual(rotations)) {
-            out.transformRotation = (rotations.size() > 0) ? rotations[0] : VtValue();
+            if (!rotations.empty()) {
+                out.uvRotation = rotations[0];
+            }
         } else {
-            TF_WARN("Cannot copy transformRotation as inputs differ.");
+            TF_WARN("Cannot copy uvRotation as inputs differ.");
         }
         if (_valuesAreEqual(scales)) {
-            out.transformScale = (scales.size() > 0) ? scales[0] : VtValue();
+            if (!scales.empty()) {
+                out.uvScale = scales[0];
+            }
         } else {
-            TF_WARN("Cannot copy transformScale as inputs differ.");
+            TF_WARN("Cannot copy uvScale as inputs differ.");
         }
         if (_valuesAreEqual(translations)) {
-            out.transformTranslation = (translations.size() > 0) ? translations[0] : VtValue();
+            if (!translations.empty()) {
+                out.uvTranslation = translations[0];
+            }
         } else {
-            TF_WARN("Cannot copy transformTranslation as inputs differ.");
+            TF_WARN("Cannot copy uvTranslation as inputs differ.");
         }
     }
     return true;

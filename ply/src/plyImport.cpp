@@ -56,14 +56,13 @@ getPropertyDataPtr(happly::Element& element, const std::string& target)
 
 struct FloatOrHalfLoader
 {
-    std::vector<float> scratchData;
-
     std::vector<float>* getPropertyDataPtr(happly::Element& element, const std::string& target)
     {
         happly::TypedProperty<float>* property =
           dynamic_cast<happly::TypedProperty<float>*>(element.getPropertyPtr(target).get());
         if (property) {
-            return &(property->data);
+            dataPtr = &(property->data);
+            return dataPtr;
         }
 
         happly::TypedProperty<std::uint16_t>* halfProperty =
@@ -78,6 +77,25 @@ struct FloatOrHalfLoader
         throw std::runtime_error("PLY import: element " + element.name +
                                  " does not have property " + target + " with the specific type.");
     }
+
+    std::vector<float>* getPropertyDataPtr()
+    {
+        if (dataPtr)
+            return dataPtr;
+        else if (scratchData.size())
+            return &scratchData;
+        throw std::runtime_error("PLY import: no property data pointer set.");
+    }
+
+    FloatOrHalfLoader() = default;
+    FloatOrHalfLoader(happly::Element& element, const std::string& target)
+    {
+        this->getPropertyDataPtr(element, target);
+    }
+
+  private:
+    std::vector<float> scratchData;
+    std::vector<float>* dataPtr = nullptr;
 };
 } // namespace
 
@@ -123,7 +141,6 @@ importPly(const ImportPlyOptions& options, PLYData& ply, UsdData& usd)
     std::vector<float>* gsRotation1 = nullptr;
     std::vector<float>* gsRotation2 = nullptr;
     std::vector<float>* gsRotation3 = nullptr;
-    std::array<std::vector<float>*, 45> gsSHCoeffs = {};
 
     FloatOrHalfLoader gsColorCoeff0Loader;
     FloatOrHalfLoader gsColorCoeff1Loader;
@@ -136,14 +153,14 @@ importPly(const ImportPlyOptions& options, PLYData& ply, UsdData& usd)
     FloatOrHalfLoader gsRotation1Loader;
     FloatOrHalfLoader gsRotation2Loader;
     FloatOrHalfLoader gsRotation3Loader;
-    std::array<FloatOrHalfLoader, 45> gsSHCoeffsLoaders;
+    std::vector<FloatOrHalfLoader> gsSHCoeffsLoaders;
 
     auto [meshIndex, mesh] = usd.addMesh();
     mesh.asPoints = options.importAsPoints || !ply.hasElement("face");
     // Will check later. An asset is a Gsplat only if it contains points and has all the Gsplat-related fields.
     mesh.asGsplats = mesh.asPoints;
 
-    bool hasHighOrderSH = false;
+    int numHighOrderSHCoeffs = 0;
     try {
         Element& element = ply.getElement("vertex");
         // happly provides plyIn.getVertexPositions(), but it uses double, so avoid it to avoid
@@ -237,24 +254,43 @@ importPly(const ImportPlyOptions& options, PLYData& ply, UsdData& usd)
         }
 
         if (mesh.asGsplats) {
-            hasHighOrderSH = mesh.asGsplats;
-            // Higher order SH coefficients are optional.
-            for (int i = 0; mesh.asGsplats && i < 45; ++i)
-            {
-                std::string propName = std::string("f_rest_") + std::to_string(i); 
+            // Higher order SH coefficients are optional. We first detect how many coefficients
+            // are present, and then load them.
+            int numSHBands = 0;
+            while (true) {
+                const int numSHBandsNext = numSHBands + 1;
+                // The total required number of coefficients for a single channel of current band is
+                // band * (band + 2), then multiplied by 3 for RGB channels.
+                const int nextBandMaxNumSH = numSHBandsNext * (numSHBandsNext + 2) * 3;
+                const std::string propName =
+                  std::string("f_rest_") + std::to_string(nextBandMaxNumSH - 1);
                 if (!element.hasProperty(propName)) {
-                    hasHighOrderSH = false;
                     break;
                 }
-                
-                try {
-                    gsSHCoeffs[i] = gsSHCoeffsLoaders[i].getPropertyDataPtr(element, propName);
-                } catch (std::exception& e) {
-                    hasHighOrderSH = false;
-                    TF_DEBUG_MSG(
-                      FILE_FORMAT_PLY, "Invalid Gaussian splatting SH data: %s\n", e.what());
-                    break;
+                numSHBands = numSHBandsNext;
+                numHighOrderSHCoeffs = nextBandMaxNumSH;
+            }
+
+            try {
+                gsSHCoeffsLoaders.reserve(numHighOrderSHCoeffs);
+                for (int i = 0; i < numHighOrderSHCoeffs; ++i) {
+                    const std::string propName = std::string("f_rest_") + std::to_string(i);
+                    if (!element.hasProperty(propName)) {
+                        TF_DEBUG_MSG(FILE_FORMAT_PLY,
+                                     "Missing Gaussian splatting SH coefficient property %s\n",
+                                     propName.c_str());
+                        numHighOrderSHCoeffs = 0;
+                        gsSHCoeffsLoaders.clear();
+                        break;
+                    }
+                    gsSHCoeffsLoaders.emplace_back(element, propName);
                 }
+            } catch (std::exception& e) {
+                TF_DEBUG_MSG(FILE_FORMAT_PLY,
+                             "Invalid Gaussian splatting SH coefficients data: %s\n",
+                             e.what());
+                numHighOrderSHCoeffs = 0;
+                gsSHCoeffsLoaders.clear();
             }
         }
     } catch (std::exception& e) {
@@ -305,9 +341,9 @@ importPly(const ImportPlyOptions& options, PLYData& ply, UsdData& usd)
         // is 1/sqrt(4*pi).
         constexpr float shC0 = 0.28209479177387814f;
         for (size_t i = 0; i < colors.values.size(); i++) {
-            colors.values[i][0] = std::clamp((*gsColorCoeff0)[i] * shC0 + 0.5f, 0.0f, 1.0f);
-            colors.values[i][1] = std::clamp((*gsColorCoeff1)[i] * shC0 + 0.5f, 0.0f, 1.0f);
-            colors.values[i][2] = std::clamp((*gsColorCoeff2)[i] * shC0 + 0.5f, 0.0f, 1.0f);
+            colors.values[i][0] = (*gsColorCoeff0)[i] * shC0 + 0.5f;
+            colors.values[i][1] = (*gsColorCoeff1)[i] * shC0 + 0.5f;
+            colors.values[i][2] = (*gsColorCoeff2)[i] * shC0 + 0.5f;
         }
     } else if (r && r->size()) {
         auto [colorIndex, colors] = usd.addColorSet(meshIndex);
@@ -399,13 +435,14 @@ importPly(const ImportPlyOptions& options, PLYData& ply, UsdData& usd)
             mesh.pointRotations.values[i] = mesh.pointRotations.values[i].GetNormalized();
         }
 
-        if (hasHighOrderSH) {
-            for (std::size_t shIndex = 0; shIndex < gsSHCoeffs.size(); ++shIndex) {
+        if (numHighOrderSHCoeffs > 0) {
+            for (std::size_t shIndex = 0; shIndex < numHighOrderSHCoeffs; ++shIndex) {
                 auto [shCoeffIndex, shCoeffs] = usd.addPointSHCoeffSet(meshIndex);
                 shCoeffs.interpolation = UsdGeomTokens->vertex;
-                shCoeffs.values.resize((*gsSHCoeffs[shIndex]).size());
+                const auto& gsSHCoeffs = *(gsSHCoeffsLoaders[shIndex].getPropertyDataPtr());
+                shCoeffs.values.resize(gsSHCoeffs.size());
                 for (size_t i = 0; i < shCoeffs.values.size(); i++) {
-                    shCoeffs.values[i] = (*gsSHCoeffs[shIndex])[i];
+                    shCoeffs.values[i] = gsSHCoeffs[i];
                 }
             }
         }

@@ -42,8 +42,8 @@ class ArAsset;
 class GltfData : public FileFormatDataBase
 {
   public:
-    std::string assetsPath;
     bool animationTracks = false;
+    bool computeBitangents = false;
     static GltfDataRefPtr InitData(const SdfFileFormat::FileFormatArguments& args);
 };
 
@@ -101,6 +101,7 @@ class USDGLTF_API UsdGltfFileFormat
   protected:
     static const TfToken assetsPathToken;
     static const TfToken animationTracksToken;
+    static const TfToken computeBitangentsToken;
 
     SDF_FILE_FORMAT_FACTORY_ACCESS;
 

@@ -13,7 +13,6 @@ governing permissions and limitations under the License.
 
 #include <fileformatutils/debugCodes.h>
 
-//#include <pxr/base/tf/pathUtils.h>
 #include <pxr/base/tf/token.h>
 #include <pxr/usd/ar/defaultResolver.h>
 #include <pxr/usd/ar/packageUtils.h>
@@ -32,10 +31,12 @@ governing permissions and limitations under the License.
 PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_PUBLIC_TOKENS(AdobeTokens, ADOBE_TOKENS);
 TF_DEFINE_PUBLIC_TOKENS(MtlXTokens, MATERIAL_X_TOKENS);
+TF_DEFINE_PUBLIC_TOKENS(UsdPreviewSurfaceTokens, USD_PREVIEW_SURFACE_TOKENS);
+TF_DEFINE_PUBLIC_TOKENS(AsmTokens, ASM_TOKENS);
 TF_DEFINE_PUBLIC_TOKENS(OpenPbrTokens, OPEN_PBR_TOKENS);
+TF_DEFINE_PUBLIC_TOKENS(OpenPbrMaterialInputTokens, OPEN_PBR_MATERIAL_INPUT_TOKENS);
 TF_DEFINE_PUBLIC_TOKENS(AdobeNgpTokens, ADOBE_NGP_TOKENS);
 TF_DEFINE_PUBLIC_TOKENS(AdobeGsplatBaseTokens, ADOBE_GSPLAT_BASE_TOKENS);
-TF_DEFINE_PUBLIC_TOKENS(AdobeGsplatSHTokens, ADOBE_GSPLAT_SH_TOKENS);
 PXR_NAMESPACE_CLOSE_SCOPE
 
 using namespace PXR_NS;
@@ -211,6 +212,19 @@ argReadFloatArray(const SdfFileFormat::FileFormatArguments& args,
     }
 }
 
+void
+argWarnDeprecatedArg(const SdfFileFormat::FileFormatArguments& args,
+                     const std::string& arg,
+                     const std::string& debugTag)
+{
+    if (const auto& it = args.find(arg); it != args.end()) {
+        TF_WARN(
+          "%s: file format argument \"%s\" is deprecated and will be removed in a future version",
+          debugTag.c_str(),
+          arg.c_str());
+    }
+}
+
 std::string
 getFileExtension(const std::string& filePath, const std::string& defaultValue = "")
 {
@@ -257,7 +271,7 @@ createDirectory(const std::filesystem::path& directoryPath)
     try {
         std::filesystem::create_directories(directoryPath);
     } catch (const std::filesystem::filesystem_error& e) {
-        TF_CODING_ERROR("Error creating directory:\n  \"{}\"", e.what());
+        TF_CODING_ERROR("Error creating directory:\n  \"%s\"", e.what());
         return false;
     }
 

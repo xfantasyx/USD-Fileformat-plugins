@@ -10,6 +10,10 @@ option(USDSBSAR_ENABLE_TEXTURE_TRANSFORM "Enables properties for tiling/scaling/
 option(USDSBSAR_ENABLE_FIX_STORM_16BIT "Enables fix storm 16bit textures issues" ON)
 # Tests options (avaible only on windows)
 option(USDSBSAR_TEST_UNDEFINED_LIBS "Raise error if at the end of compilation libs are not correctly linked" ON)
+# Cache settings
+set(USDSBSAR_CACHE_SIZE 1000000000 CACHE "" STRING)
+set(USDSBSAR_IMAGE_CACHE_SIZE 1000000000 CACHE "" STRING)
+set(USDSBSAR_PACKAGE_LIMIT 10 CACHE "" STRING)
 
 # Check if we're on an Apple silicon platform
 set(USDSBSAR_BUILD_APPLE_SILICON OFF)

@@ -49,9 +49,7 @@ PXR_NAMESPACE_USING_DIRECTIVE
 #define TOSTRING(x) STRINGIFY(x)
 
 namespace {
-// Borrowed from
-// https://git.corp.adobe.com/substance-integrations/integrations-common
-
+// Common Substance integrations information
 const char* const engineCreateContextSymbol = "substanceContextInitImpl";
 const char* const engineReleaseContextSymbol = "substanceContextRelease";
 typedef void (*engineVersionFunction)(SubstanceVersion* version, unsigned int apiVersion);

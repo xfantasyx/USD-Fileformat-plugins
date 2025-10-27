@@ -23,6 +23,18 @@ governing permissions and limitations under the License.
 
 namespace adobe::usd::sbsar {
 
+/// @brief Add a LuxDomeLight prim to the given Sdf layer.
+///
+/// The LuxDomeLight prim represents a dome light with an IBL texture.
+///
+/// @param sdfData          Sdf data to store the layer in.
+/// @param graphName        Name of the current sbsar graph.
+/// @param graphDesc        Description of the current sbsar graph.
+/// @param packagePath      Path of the sbsar file.
+/// @param sbsarHash        Hash of the sbsar.
+/// @param symbolMapper     Symbol mapper to avoid conflict between parameters.
+/// @param sbsarData        Options for the sbsar. See SBSAROptions.
+/// @return The path of the created dome light prim.
 PXR_NS::SdfPath
 addLuxDomeLight(PXR_NS::SdfAbstractData* sdfData,
                 const MappedSymbol& graphName,

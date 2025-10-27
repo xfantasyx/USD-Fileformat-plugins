@@ -17,10 +17,10 @@ governing permissions and limitations under the License.
 #include <pxr/usd/usd/prim.h>
 #include <pxr/usd/usd/stage.h>
 
+PXR_NAMESPACE_USING_DIRECTIVE
+
 TEST(GlTFSanityTests, LoadCube)
 {
-    PXR_NAMESPACE_USING_DIRECTIVE
-
     // Load an FBX
     UsdStageRefPtr stage = UsdStage::Open("SanityCube.gltf");
     ASSERT_TRUE(stage);

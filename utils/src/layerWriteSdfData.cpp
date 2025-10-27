@@ -15,7 +15,7 @@ governing permissions and limitations under the License.
 #include <fileformatutils/debugCodes.h>
 #include <fileformatutils/geometry.h>
 #include <fileformatutils/layerWriteMaterial.h>
-#include <fileformatutils/layerWriteMaterialX.h>
+#include <fileformatutils/layerWriteOpenPBR.h>
 #include <fileformatutils/sdfMaterialUtils.h>
 #include <fileformatutils/sdfUtils.h>
 #include <fileformatutils/usdData.h>
@@ -554,6 +554,7 @@ _writePrimvars(SdfAbstractData* sdfData, const SdfPath& primPath, const Mesh& me
         }
         _writePrimvar(sdfData, primPath, "normals", SdfValueTypeNames->Normal3fArray, mesh.normals);
         _writePrimvar(sdfData, primPath, "tangents", SdfValueTypeNames->Float4Array, mesh.tangents);
+        _writePrimvar(sdfData, primPath, "bitangents", SdfValueTypeNames->Float3Array, mesh.bitangents);
     }
 
     auto indexedName = [](const std::string& baseName, int index) -> std::string {
@@ -890,11 +891,10 @@ _writeNurb(SdfAbstractData* sdfData, const SdfPath& parentPath, NurbData& nurb)
 }
 
 SdfPath
-_writeCurve(WriteSdfContext& ctx,
-            const SdfPath& parentPath,
-            const Curve& curve)
+_writeCurve(WriteSdfContext& ctx, const SdfPath& parentPath, const Curve& curve)
 {
-    SdfPath primPath = createPrimSpec(ctx.sdfData, parentPath, TfToken(curve.name), UsdGeomTokens->BasisCurves);
+    SdfPath primPath =
+      createPrimSpec(ctx.sdfData, parentPath, TfToken(curve.name), UsdGeomTokens->BasisCurves);
     TF_DEBUG_MSG(FILE_FORMAT_UTIL, "write curve: path=%s\n", primPath.GetString().c_str());
 
     auto createAttr = [&](const TfToken& name,
@@ -934,9 +934,10 @@ _writeCurve(WriteSdfContext& ctx,
             cvc[i] = 4;
         }
         createAttr(UsdGeomTokens->curveVertexCounts, SdfValueTypeNames->IntArray, cvc);
-    }
-    else {
-        createAttr(UsdGeomTokens->curveVertexCounts, SdfValueTypeNames->IntArray, PXR_NS::VtArray<int>{npts});
+    } else {
+        createAttr(UsdGeomTokens->curveVertexCounts,
+                   SdfValueTypeNames->IntArray,
+                   PXR_NS::VtArray<int>{ npts });
     }
 
 #if 0
@@ -1220,7 +1221,7 @@ _writeSkeletonAnimation(SdfAbstractData* sdfData,
 }
 
 SdfPath
-_writeMaterial(WriteSdfContext& ctx, const SdfPath& parentPath, const Material& material)
+_writeMaterial(WriteSdfContext& ctx, const SdfPath& parentPath, const OpenPbrMaterial& material)
 {
     SdfPath materialPath = createMaterialPrimSpec(ctx.sdfData, parentPath, TfToken(material.name));
 
@@ -1229,8 +1230,6 @@ _writeMaterial(WriteSdfContext& ctx, const SdfPath& parentPath, const Material& 
           ctx.sdfData, materialPath, SdfFieldKeys->DisplayName, VtValue(material.displayName));
     }
 
-    printMaterial("layer::write", materialPath, material, ctx.debugTag);
-
     TF_DEBUG_MSG(FILE_FORMAT_UTIL,
                  "layer::write material '%s' to %s\n",
                  material.name.c_str(),
@@ -1238,17 +1237,21 @@ _writeMaterial(WriteSdfContext& ctx, const SdfPath& parentPath, const Material& 
 
     MaterialInputs materialInputs;
 
-    // Generate a UsdPreviewSurface based material network
-    writeUsdPreviewSurface(ctx, materialPath, material, materialInputs);
+    if (ctx.options->writeUsdPreviewSurface) {
+        // Generate a UsdPreviewSurface based material network
+        writeUsdPreviewSurface(ctx, materialPath, material, materialInputs);
+    }
 
 #ifdef USD_FILEFORMATS_ENABLE_ASM
-    // Generate a ASM based material network
-    writeAsmMaterial(ctx, materialPath, material, materialInputs);
+    if (ctx.options->writeASM) {
+        // Generate a ASM based material network
+        writeAsmMaterial(ctx, materialPath, material, materialInputs);
+    }
 #endif // USD_FILEFORMATS_ENABLE_ASM
 
-    if (ctx.options->writeMaterialX) {
-        // Generate a MaterialX based material network
-        writeMaterialX(ctx, materialPath, material, materialInputs);
+    if (ctx.options->writeOpenPBR) {
+        // Generate a MaterialX based material network for OpenPBR
+        writeOpenPBR(ctx, materialPath, material, materialInputs);
     }
 
     return materialPath;
@@ -1457,7 +1460,12 @@ _writeLayerSdfData(const WriteLayerOptions& options,
         SdfPath materialsPath = createPrimSpec(sdfData, rootNodePath, materialsPrimName);
         int i = 0;
         for (const Material& material : usdData.materials) {
-            ctx.materialMap[i++] = _writeMaterial(ctx, materialsPath, material);
+            const OpenPbrMaterial openPbrMaterial =
+              mapMaterialStructToOpenPbrMaterialStruct(material);
+            ctx.materialMap[i++] = _writeMaterial(ctx, materialsPath, openPbrMaterial);
+
+            SdfPath materialPath = materialsPath.AppendChild(TfToken(material.name));
+            printMaterial("layer::write", materialPath, material, ctx.debugTag);
         }
     }
 
@@ -1478,7 +1486,7 @@ _writeLayerSdfData(const WriteLayerOptions& options,
         }
     }
 
-    // Write skeletons after nodes, as we want skeletons to be parented to the nodes
+    // Write skeletons after nodes, as we sometimes want skeletons to be parented to the nodes
     if (!usdData.skeletons.empty()) {
         ctx.skeletonMap.resize(usdData.skeletons.size());
 
@@ -1487,7 +1495,10 @@ _writeLayerSdfData(const WriteLayerOptions& options,
             // Create a SkelRoot to host the skeleton, the skeleton animation (if present) and any
             // related meshes
 
-            const SdfPath& skelParentPath = ctx.nodeMap[skeleton.parent];
+            // If the skeleton has a parent, use that- otherwise, don't use a parent (similar to a
+            // root node)
+            const SdfPath& skelParentPath =
+              (skeleton.parent == -1) ? rootNodePath : ctx.nodeMap[skeleton.parent];
 
             std::string skelRootName = skeleton.name + "_SkelRoot";
             SdfPath skelRootPath = createPrimSpec(

@@ -11,7 +11,7 @@ governing permissions and limitations under the License.
 */
 #include "sbsarMaterial.h"
 #include "sbsarAsm.h"
-#include "sbsarMtlx.h"
+#include "sbsarOpenPBR.h"
 #include "sbsarUsdPreviewSurface.h"
 #include "usdGenerationHelpers.h"
 #include <iostream>
@@ -84,22 +84,7 @@ initDefaultMaterialInputs(SdfAbstractData* sdfData,
             // Not setting a default value here, so that it has to be overwritten in the payload
             // reference
         }
-        auto defaultIt = default_channels.find(usage);
-        if (defaultIt != default_channels.end()) {
-            auto names = getDefaultValueNames(usage);
 
-            SdfPath inputPath =
-              createShaderInput(sdfData, materialPath, names.first, defaultIt->second.type);
-            setAttributeDefaultValue(sdfData, inputPath, defaultIt->second.value);
-            setRangeMetadata(sdfData, inputPath, defaultIt->second.range);
-            setAttributeMetadata(sdfData, inputPath, SdfFieldKeys->Hidden, VtValue(true));
-
-            SdfPath textureBlendPath =
-              createShaderInput(sdfData, materialPath, names.second, SdfValueTypeNames->Float);
-            setAttributeDefaultValue(sdfData, textureBlendPath, 1.0f);
-            setRangeMetadata(sdfData, textureBlendPath, { VtValue(0.0f), VtValue(1.0f) });
-            setAttributeMetadata(sdfData, textureBlendPath, SdfFieldKeys->Hidden, VtValue(true));
-        }
         if (isNormal(usage)) {
             const auto [scaleName, biasName] = getNormalMapScaleAndBiasNames(usage);
             SdfPath scaleAttrPath =
@@ -165,7 +150,8 @@ setMaterialValues(SdfAbstractData* sdfData,
                 SdfPath textureAssetPath = createShaderInput(
                   sdfData, materialPath, textureAssetName, defaultIt->second.type);
                 std::string infoPath = generateSbsarInfoPath(usage, graphName, sbsarHash, jsParams);
-                TF_DEBUG(FILE_FORMAT_SBSAR).Msg("Using engine to get value for %s", usage.c_str());
+                TF_DEBUG(FILE_FORMAT_SBSAR)
+                  .Msg("Using engine to get value for %s\n", usage.c_str());
                 setAttributeDefaultValue(
                   sdfData, textureAssetPath, renderSbsarValue(packagePath, infoPath));
             }
@@ -238,9 +224,6 @@ addStandardMaterial(SdfAbstractData* sdfData,
                     const SubstanceAir::GraphDesc& graphDesc,
                     const SBSAROptions& options)
 {
-
-    bool isRefractive = hasUsage("refraction", graphDesc);
-
 #ifdef USDSBSAR_ENABLE_TEXTURE_TRANSFORM
     addMaterialTransform(sdfData, materialPath);
 #endif // USDSBSAR_ENABLE_TEXTURE_TRANSFORM
@@ -251,31 +234,35 @@ addStandardMaterial(SdfAbstractData* sdfData,
     setAttributeDefaultValue(sdfData, uvChannelNamePath, std::string("st"));
     setAttributeMetadata(sdfData, uvChannelNamePath, SdfFieldKeys->Hidden, VtValue(true));
 
+    // Expose the texture wrap modes for texture reading nodes. This is shared by ASM and
+    // UsdPreviewSurface
+    if (options.writeASM || options.writeUsdPreviewSurface) {
+        SdfPath uvWrapSPath =
+          createShaderInput(sdfData, materialPath, uv_wrap_s_name, SdfValueTypeNames->Token);
+        SdfPath uvWrapTPath =
+          createShaderInput(sdfData, materialPath, uv_wrap_t_name, SdfValueTypeNames->Token);
+        setAttributeDefaultValue(sdfData, uvWrapSPath, AdobeTokens->repeat);
+        setAttributeDefaultValue(sdfData, uvWrapTPath, AdobeTokens->repeat);
+        VtTokenArray wrapModes = {
+            AdobeTokens->repeat, AdobeTokens->mirror, AdobeTokens->clamp, AdobeTokens->black
+        };
+        setAttributeMetadata(sdfData, uvWrapSPath, SdfFieldKeys->AllowedTokens, VtValue(wrapModes));
+        setAttributeMetadata(sdfData, uvWrapTPath, SdfFieldKeys->AllowedTokens, VtValue(wrapModes));
+    }
+
     // Add ASM Implementation
     if (options.writeASM) {
         addAsmShader(sdfData, materialPath, graphDesc);
     }
 
-    if (isRefractive) {
-        // Add Refractive UsdPreviewSurface Implementation
-        if (options.writeUsdPreviewSurface) {
-            addUsdPreviewSurfaceRefractive(sdfData, materialPath, graphDesc);
-        }
-        // Add Refractive MaterialX Implementation
-        if (options.writeMaterialX) {
-            addMtlxShaderRefractive(sdfData, materialPath, graphDesc);
-        }
+    // Add UsdPreviewSurface Implementation
+    if (options.writeUsdPreviewSurface) {
+        addUsdPreviewSurface(sdfData, materialPath, graphDesc);
     }
 
-    else {
-        // Add UsdPreviewSurface Implementation
-        if (options.writeUsdPreviewSurface) {
-            addUsdPreviewSurface(sdfData, materialPath, graphDesc);
-        }
-        // Add Refractive MaterialX Implementation
-        if (options.writeMaterialX) {
-            addMtlxShader(sdfData, materialPath, graphDesc);
-        }
+    // Add Refractive MaterialX Implementation
+    if (options.writeOpenPBR) {
+        addOpenPbrShader(sdfData, materialPath, graphDesc);
     }
 }
 
@@ -356,6 +343,9 @@ addMaterialPrim(SdfAbstractData* sdfData,
           createMaterialPrimSpec(sdfData, rootPath, TfToken(graphName.usdName));
         // process usd sbsarParameters into a js dict
         JsValue jsParams = convertSbsarParameters(sbsarData.sbsarParameters);
+        // We assume opengl in the initial state, but the substance engine assumes directx, this
+        // will tell the engine to use opengl formatting
+        jsParams = applyDefaultNormalFormatInput(graphDesc, jsParams);
         // Set the procedural texture paths based on the sbsarParameters
         setMaterialTexturePaths(sdfData, materialPath, graphDesc, graphName, sbsarHash, jsParams);
         // Set procedural values for uniform usage

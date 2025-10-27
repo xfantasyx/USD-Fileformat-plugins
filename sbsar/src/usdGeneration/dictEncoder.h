@@ -16,9 +16,18 @@ governing permissions and limitations under the License.
 
 namespace adobe::usd::sbsar {
 namespace DictEncoder {
+
+/// \brief Serializes a VtDictionary to the given output stream.
+/// \param dict The VtDictionary to serialize.
+/// \param output The output stream to write the serialized dictionary to.
 void
 writeDict(const PXR_NS::VtDictionary& dict, std::ostream& output);
+
+/// \brief Deserializes a VtDictionary from the given input stream.
+/// \param input The input stream to read the serialized dictionary from.
+/// \return The deserialized VtDictionary.
 PXR_NS::VtDictionary
 readDict(std::istream& input);
+
 }
 }

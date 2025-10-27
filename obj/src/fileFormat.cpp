@@ -59,10 +59,15 @@ UsdObjFileFormat::InitData(const FileFormatArguments& args) const
         TF_DEBUG_MSG(
           FILE_FORMAT_OBJ, "FileFormatArg: %s = %s\n", arg.first.c_str(), arg.second.c_str());
     }
-    argReadBool(args, AdobeTokens->writeMaterialX.GetText(), pd->writeMaterialX, DEBUG_TAG);
-    argReadString(args, assetsPathToken.GetText(), pd->assetsPath, DEBUG_TAG);
-    argReadBool(args, phongToken.GetText(), pd->phong, DEBUG_TAG);
-    argReadString(args, originalColorSpaceToken.GetText(), pd->originalColorSpace, DEBUG_TAG);
+    pd->parseFromFileFormatArgs(args, DEBUG_TAG);
+
+    // "objAssetsPath" is deprecated in favor of the universal "assetsPath" argument - 2025-3-18
+    // If both are present, "objAssetsPath" is stronger.
+    argReadString(args, assetsPathToken.GetString(), pd->assetsPath, DEBUG_TAG);
+    argWarnDeprecatedArg(args, assetsPathToken.GetString(), DEBUG_TAG);
+
+    argReadBool(args, phongToken.GetString(), pd->phong, DEBUG_TAG);
+    argReadString(args, originalColorSpaceToken.GetString(), pd->originalColorSpace, DEBUG_TAG);
     return pd;
 }
 void
@@ -110,14 +115,13 @@ UsdObjFileFormat::Read(SdfLayer* layer, const std::string& resolvedPath, bool me
     options.importMaterials = true;
     options.importImages = readImages;
     options.importPhong = data->phong;
-    WriteLayerOptions layerOptions;
-    layerOptions.writeMaterialX = data->writeMaterialX;
-    layerOptions.assetsPath = data->assetsPath;
+    WriteLayerOptions layerOptions(*data);
     obj.originalColorSpace = data->originalColorSpace;
     GUARD(
       readObj(obj, resolvedPath, readImages), "Error reading OBJ from %s\n", resolvedPath.c_str());
     GUARD(importObj(options, obj, usd), "Error translating OBJ to USD\n");
-    GUARD(writeLayer(layerOptions, usd, layer, layerData, fileType, DEBUG_TAG, SdfFileFormat::_SetLayerData),
+    GUARD(writeLayer(
+            layerOptions, usd, layer, layerData, fileType, DEBUG_TAG, SdfFileFormat::_SetLayerData),
           "Error writing to the USD layer\n");
     w.Stop();
     TF_DEBUG_MSG(FILE_FORMAT_OBJ, "Total time: %ld\n", static_cast<long int>(w.GetMilliseconds()));
@@ -137,13 +141,20 @@ UsdObjFileFormat::ReadFromString(SdfLayer* layer, const std::string& input) cons
     TfStopwatch w;
     w.Start();
     SdfAbstractDataRefPtr layerData = InitData(layer->GetFileFormatArguments());
+    ObjDataConstPtr data = TfDynamic_cast<const ObjDataConstPtr>(layerData);
     UsdData usd;
     Obj obj;
     ImportObjOptions options;
-    WriteLayerOptions layerOptions;
+    bool readImages = !data->assetsPath.empty();
+    WriteLayerOptions layerOptions(*data);
+    options.importGeometry = true;
+    options.importMaterials = true;
+    options.importImages = readImages;
+    options.importPhong = data->phong;
     GUARD(readObj(obj, input.c_str(), input.size()), "Error reading OBJ from string\n");
     GUARD(importObj(options, obj, usd), "Error translating OBJ to USD\n");
-    GUARD(writeLayer(layerOptions, usd, layer, layerData, "obj", DEBUG_TAG, SdfFileFormat::_SetLayerData),
+    GUARD(writeLayer(
+            layerOptions, usd, layer, layerData, "obj", DEBUG_TAG, SdfFileFormat::_SetLayerData),
           "Error writing to the USD stage\n");
     w.Stop();
     TF_DEBUG_MSG(FILE_FORMAT_OBJ, "Total time: %ld\n", static_cast<long int>(w.GetMilliseconds()));

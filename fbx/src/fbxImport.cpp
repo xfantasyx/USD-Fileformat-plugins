@@ -85,7 +85,20 @@ struct ImportFbxContext
 void
 importMetadata(ImportFbxContext& ctx)
 {
-    ctx.usd->metadata.SetValueAtPath("generator", PXR_NS::VtValue("Adobe usdFbx 1.0"));
+    std::string generator = "Adobe usdFbx 1.0";
+
+    FbxDocumentInfo* docInfo = ctx.fbx->scene->GetDocumentInfo();
+    if (docInfo) {
+        FbxString origAppName = docInfo->Original_ApplicationName.Get();
+
+        // If the FBX specified a generator, add it to the USD generator string
+        if (!origAppName.IsEmpty()) {
+            generator += "; FBX generator: ";
+            generator += origAppName.Buffer();
+        }
+    }
+
+    ctx.usd->metadata.SetValueAtPath("generator", PXR_NS::VtValue(generator));
     if (!ctx.options->originalColorSpace.IsEmpty()) {
         ctx.usd->metadata.SetValueAtPath(AdobeTokens->originalColorSpace,
                                          PXR_NS::VtValue(ctx.options->originalColorSpace));
@@ -399,6 +412,60 @@ importFbxMesh(ImportFbxContext& ctx, FbxMesh* fbxMesh, int parent)
         }
     }
 
+    // Tangents
+    FbxGeometryElementTangent* tangentElement = fbxMesh->GetElementTangent();
+    if (tangentElement != nullptr) {
+        mesh.tangents.interpolation = fbxGetInterpolation(tangentElement->GetMappingMode());
+        if (tangentElement->GetReferenceMode() == FbxGeometryElement::eDirect) {
+            size_t tangentCount = tangentElement->GetDirectArray().GetCount();
+            mesh.tangents.values.resize(tangentCount);
+            for (size_t i = 0; i < tangentCount; i++) {
+                FbxVector4 tangent = tangentElement->GetDirectArray().GetAt(i);
+                mesh.tangents.values[i] = GfVec4f{ static_cast<float>(tangent[0]),
+                                                  static_cast<float>(tangent[1]),
+                                                  static_cast<float>(tangent[2]),
+                                                  static_cast<float>(tangent[3]) };
+            }
+        } else { // FbxGeometryElement::eIndexToDirect
+            size_t tangentCount = tangentElement->GetIndexArray().GetCount();
+            mesh.tangents.values.resize(tangentCount);
+            for (size_t i = 0; i < tangentCount; i++) {
+                int tangentIndex = tangentElement->GetIndexArray().GetAt(i);
+                FbxVector4 tangent = tangentElement->GetDirectArray().GetAt(tangentIndex);
+                mesh.tangents.values[i] = GfVec4f{ static_cast<float>(tangent[0]),
+                                                  static_cast<float>(tangent[1]),
+                                                  static_cast<float>(tangent[2]),
+                                                  static_cast<float>(tangent[3]) };
+            }
+        }
+    }
+
+    // Bitangents (read from FBX binormals)
+    FbxGeometryElementBinormal* binormalElement = fbxMesh->GetElementBinormal();
+    if (binormalElement != nullptr) {
+        mesh.bitangents.interpolation = fbxGetInterpolation(binormalElement->GetMappingMode());
+        if (binormalElement->GetReferenceMode() == FbxGeometryElement::eDirect) {
+            size_t binormalCount = binormalElement->GetDirectArray().GetCount();
+            mesh.bitangents.values.resize(binormalCount);
+            for (size_t i = 0; i < binormalCount; i++) {
+                FbxVector4 binormal = binormalElement->GetDirectArray().GetAt(i);
+                mesh.bitangents.values[i] = GfVec3f{ static_cast<float>(binormal[0]),
+                                                  static_cast<float>(binormal[1]),
+                                                  static_cast<float>(binormal[2]) };
+            }
+        } else { // FbxGeometryElement::eIndexToDirect
+            size_t binormalCount = binormalElement->GetIndexArray().GetCount();
+            mesh.bitangents.values.resize(binormalCount);
+            for (size_t i = 0; i < binormalCount; i++) {
+                int binormalIndex = binormalElement->GetIndexArray().GetAt(i);
+                FbxVector4 binormal = binormalElement->GetDirectArray().GetAt(binormalIndex);
+                mesh.bitangents.values[i] = GfVec3f{ static_cast<float>(binormal[0]),
+                                                  static_cast<float>(binormal[1]),
+                                                  static_cast<float>(binormal[2]) };
+            }
+        }
+    }
+
     // Uvs
     size_t elementUVsCount = fbxMesh->GetElementUVCount();
     size_t numUVsets = 0;
@@ -621,45 +688,63 @@ importFbxMesh(ImportFbxContext& ctx, FbxMesh* fbxMesh, int parent)
     if (fbxNode != nullptr) {
         int materialCount = fbxNode->GetMaterialCount();
         int elementMaterialCount = fbxMesh->GetElementMaterialCount();
-        for (int i = 0; i < elementMaterialCount; i++) {
-            if (i >= 1) {
-                TF_WARN("Mesh[%s].material[%d] Multiple material layers not supported\n",
-                        mesh.name.c_str(),
-                        i);
-                break;
+        if (elementMaterialCount == 0 && materialCount > 0) {
+            // If there are no element materials, FBX defaults to using the first material for the
+            // whole mesh
+            TF_DEBUG_MSG(FILE_FORMAT_FBX,
+                "Mesh[%s] has no material elements. Defaulting to use first material\n",
+                mesh.name.c_str());
+
+            FbxSurfaceMaterial* fbxMaterial = fbxNode->GetMaterial(0);
+            const auto& it = ctx.materials.find(fbxMaterial);
+            if (it != ctx.materials.end()) {
+                mesh.material = it->second;
+            } else {
+                TF_WARN("Mesh[%s] has no material element, and the (default) first material "
+                        "could not be found. No materials will be linked\n",
+                        mesh.name.c_str());
             }
-            FbxGeometryElementMaterial* material = fbxMesh->GetElementMaterial(i);
-            FbxLayerElement::EMappingMode mappingMode = material->GetMappingMode();
-            if (mappingMode == FbxLayerElement::EMappingMode::eNone) {
-                TF_DEBUG_MSG(FILE_FORMAT_FBX, "None material mapping mode found\n");
-            } else if (mappingMode == FbxLayerElement::EMappingMode::eByControlPoint) {
-                TF_DEBUG_MSG(FILE_FORMAT_FBX,
-                             "byControlPoint material mapping mode not supported\n");
-            } else if (mappingMode == FbxLayerElement::EMappingMode::eByPolygonVertex) {
-                TF_DEBUG_MSG(FILE_FORMAT_FBX,
-                             "byPolygonVertex material mapping mode not supported\n");
-            } else if (mappingMode == FbxLayerElement::EMappingMode::eByPolygon) {
-                for (int i = 0; i < materialCount; i++) {
-                    auto [subsetIndex, subset] = ctx.usd->addSubset(meshIndex);
+        } else {
+            for (int i = 0; i < elementMaterialCount; i++) {
+                if (i >= 1) {
+                    TF_WARN("Mesh[%s].material[%d] Multiple material layers not supported\n",
+                            mesh.name.c_str(),
+                            i);
+                    break;
+                }
+                FbxGeometryElementMaterial* material = fbxMesh->GetElementMaterial(i);
+                FbxLayerElement::EMappingMode mappingMode = material->GetMappingMode();
+                if (mappingMode == FbxLayerElement::EMappingMode::eNone) {
+                    TF_DEBUG_MSG(FILE_FORMAT_FBX, "None material mapping mode found\n");
+                } else if (mappingMode == FbxLayerElement::EMappingMode::eByControlPoint) {
+                    TF_DEBUG_MSG(FILE_FORMAT_FBX,
+                                 "byControlPoint material mapping mode not supported\n");
+                } else if (mappingMode == FbxLayerElement::EMappingMode::eByPolygonVertex) {
+                    TF_DEBUG_MSG(FILE_FORMAT_FBX,
+                                 "byPolygonVertex material mapping mode not supported\n");
+                } else if (mappingMode == FbxLayerElement::EMappingMode::eByPolygon) {
+                    for (int i = 0; i < materialCount; i++) {
+                        auto [subsetIndex, subset] = ctx.usd->addSubset(meshIndex);
+                        FbxSurfaceMaterial* fbxMaterial = fbxNode->GetMaterial(i);
+                        const auto& it = ctx.materials.find(fbxMaterial);
+                        if (it != ctx.materials.end()) {
+                            subset.material = it->second;
+                        }
+                        for (int j = 0; j < material->GetIndexArray().GetCount(); j++) {
+                            int index = material->GetIndexArray().GetAt(j);
+                            if (index == i) {
+                                subset.faces.push_back(j);
+                            }
+                        }
+                    }
+                } else if (mappingMode == FbxLayerElement::EMappingMode::eByEdge) {
+                    TF_DEBUG_MSG(FILE_FORMAT_FBX, "byEdge material mapping mode not supported\n");
+                } else if (mappingMode == FbxLayerElement::EMappingMode::eAllSame) {
                     FbxSurfaceMaterial* fbxMaterial = fbxNode->GetMaterial(i);
                     const auto& it = ctx.materials.find(fbxMaterial);
                     if (it != ctx.materials.end()) {
-                        subset.material = it->second;
+                        mesh.material = it->second;
                     }
-                    for (int j = 0; j < material->GetIndexArray().GetCount(); j++) {
-                        int index = material->GetIndexArray().GetAt(j);
-                        if (index == i) {
-                            subset.faces.push_back(j);
-                        }
-                    }
-                }
-            } else if (mappingMode == FbxLayerElement::EMappingMode::eByEdge) {
-                TF_DEBUG_MSG(FILE_FORMAT_FBX, "byEdge material mapping mode not supported\n");
-            } else if (mappingMode == FbxLayerElement::EMappingMode::eAllSame) {
-                FbxSurfaceMaterial* fbxMaterial = fbxNode->GetMaterial(i);
-                const auto& it = ctx.materials.find(fbxMaterial);
-                if (it != ctx.materials.end()) {
-                    mesh.material = it->second;
                 }
             }
         }
@@ -708,17 +793,17 @@ importPropFileTexture(ImportFbxContext& ctx,
 
         double su = texture->GetScaleU();
         double sv = texture->GetScaleV();
-        if (su != 1 || sv != 1) {
-            input.transformScale = GfVec2f(su, sv);
+        if (su != 1.0 || sv != 1.0) {
+            input.uvScale = GfVec2f(su, sv);
         }
         double rot = texture->GetRotationW();
-        if (rot != 0) {
-            input.transformRotation = rot;
+        if (rot != 0.0) {
+            input.uvRotation = rot;
         }
         double tu = texture->GetTranslationU();
         double tv = texture->GetTranslationV();
-        if (tu != 0 || tv != 0) {
-            input.transformTranslation = GfVec2f(tu, tv);
+        if (tu != 0.0 || tv != 0.0) {
+            input.uvTranslation = GfVec2f(tu, tv);
         }
     }
 }
@@ -1085,6 +1170,200 @@ _mapAutodeskStandardMaterial(const FbxSurfaceMaterial* fbxMaterial,
     return true;
 }
 
+bool
+_processHardwareShaderMaterial(const FbxSurfaceMaterial* fbxMaterial,
+                                ImportFbxContext& ctx,
+                                const std::unordered_map<FbxObject*, size_t>& textures,
+                                Material& usdMaterial,
+                                InputTranslator& inputTranslator)
+{
+    TF_DEBUG_MSG(FILE_FORMAT_FBX, "Attempting hardware shader material processing for '%s'\n", 
+                fbxMaterial->GetName());
+    
+    bool foundAnyProperties = false;
+    
+    FbxProperty prop = fbxMaterial->GetFirstProperty();
+    int propertyIndex = 0;
+    
+    while (prop.IsValid()) {
+        auto propType = prop.GetPropertyDataType();
+        
+        // Check for ColorAndAlpha properties (typical for 3ds Max materials)
+        if (propType.GetType() == eFbxDouble4) {
+            auto typedProperty = static_cast<FbxPropertyT<FbxDouble4>>(prop);
+            FbxDouble4 colorWithAlpha = typedProperty.Get();
+            GfVec3f colorValue(colorWithAlpha[0], colorWithAlpha[1], colorWithAlpha[2]);
+            
+            // (3ds Max Physical Material stores base_color as the first ColorAndAlpha property)
+            if (colorValue != GfVec3f(0, 0, 0) && !usdMaterial.diffuseColor.value.IsHolding<GfVec3f>()) {
+                usdMaterial.diffuseColor.value = colorValue;
+                usdMaterial.diffuseColor.colorspace = AdobeTokens->sRGB;
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, "  Found color at property index %d: (%f, %f, %f)\n",
+                            propertyIndex, colorValue[0], colorValue[1], colorValue[2]);
+                foundAnyProperties = true;
+            }
+        }
+        
+        prop = fbxMaterial->GetNextProperty(prop);
+        propertyIndex++;
+    }
+    
+    return foundAnyProperties;
+}
+
+// Fallback processor for materials with unknown ShadingModel that fail Lambert/Phong casting.
+// This uses property-based detection to extract common material properties regardless of 
+// FBX material type classification.
+// Returns true if the material was successfully processed as a property-based material
+bool
+_processUnknownShadingModel(const FbxSurfaceMaterial* fbxMaterial,
+                            ImportFbxContext& ctx,
+                            const std::unordered_map<FbxObject*, size_t>& textures,
+                            Material& usdMaterial,
+                            InputTranslator& inputTranslator)
+{
+    TF_DEBUG_MSG(FILE_FORMAT_FBX,
+                 "Processing material '%s' with unknown ShadingModel using property-based approach\n",
+                 fbxMaterial->GetName());
+    
+    bool foundAnyProperties = false;
+    
+    // Helper to safely extract color properties with multiple naming conventions
+    auto extractColorProperty = [&](const std::vector<std::string>& names, Input& targetInput) -> bool {
+        for (const std::string& propName : names) {
+            auto property = FbxSurfaceMaterialUtils::GetProperty(propName.c_str(), fbxMaterial);
+            if (property.IsValid()) {
+                // Check for both FbxDouble3DT and ColorRGB types (more flexible)
+                auto propType = property.GetPropertyDataType();
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, "  Checking property '%s' (type: %s)\n", 
+                            propName.c_str(), propType.GetName());
+                
+                // Check if property is compatible with FbxDouble3 or FbxDouble4 (ColorAndAlpha)
+                if (propType.GetType() == eFbxDouble3) {
+                    auto typedProperty = static_cast<FbxPropertyT<FbxDouble3>>(property);
+                    GfVec3f colorValue = readPropValue(typedProperty);
+                    if (colorValue != GfVec3f(0, 0, 0)) { // Skip if all zeros
+                        targetInput.value = colorValue;
+                        targetInput.colorspace = AdobeTokens->sRGB;
+                        TF_DEBUG_MSG(FILE_FORMAT_FBX, "  Found color property '%s': (%f, %f, %f)\n", 
+                                    propName.c_str(), colorValue[0], colorValue[1], colorValue[2]);
+                        return true;
+                    }
+                } else if (propType.GetType() == eFbxDouble4) {
+                    // Handle ColorAndAlpha (FbxDouble4) - extract RGB, ignore alpha
+                    auto typedProperty = static_cast<FbxPropertyT<FbxDouble4>>(property);
+                    FbxDouble4 colorWithAlpha = typedProperty.Get();
+                    GfVec3f colorValue(colorWithAlpha[0], colorWithAlpha[1], colorWithAlpha[2]);
+                    if (colorValue != GfVec3f(0, 0, 0)) { // Skip if all zeros
+                        targetInput.value = colorValue;
+                        targetInput.colorspace = AdobeTokens->sRGB;
+                        TF_DEBUG_MSG(FILE_FORMAT_FBX, "  Found ColorAndAlpha property '%s': (%f, %f, %f, alpha=%f)\n", 
+                                    propName.c_str(), colorValue[0], colorValue[1], colorValue[2], colorWithAlpha[3]);
+                        return true;
+                    }
+                } else {
+                    TF_DEBUG_MSG(FILE_FORMAT_FBX, "  Property '%s' has incompatible type '%s', expected FbxDouble3 or FbxDouble4\n", 
+                                propName.c_str(), propType.GetName());
+                }
+            }
+        }
+        return false;
+    };
+    
+    // Helper to safely extract scalar properties with multiple naming conventions
+    auto extractScalarProperty = [&](const std::vector<std::string>& names, Input& targetInput) -> bool {
+        for (const std::string& propName : names) {
+            auto property = FbxSurfaceMaterialUtils::GetProperty(propName.c_str(), fbxMaterial);
+            if (property.IsValid() && property.GetPropertyDataType() == FbxDoubleDT) {
+                double scalarValue = property.Get<double>();
+                if (scalarValue > 0.0) { // Skip if zero or negative
+                    targetInput.value = static_cast<float>(scalarValue);
+                    targetInput.colorspace = AdobeTokens->raw;
+                    TF_DEBUG_MSG(FILE_FORMAT_FBX, "  Found scalar property '%s': %f\n", 
+                                propName.c_str(), scalarValue);
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    
+    // Debug: List all properties available on this material
+    if (TfDebug::IsEnabled(FILE_FORMAT_FBX)) {
+        TF_DEBUG_MSG(FILE_FORMAT_FBX, "Debugging properties for material '%s':\n", fbxMaterial->GetName());
+        FbxProperty prop = fbxMaterial->GetFirstProperty();
+        int propertyCount = 0;
+        while (prop.IsValid()) {
+            const char* propName = prop.GetName();
+            auto propType = prop.GetPropertyDataType();
+            TF_DEBUG_MSG(FILE_FORMAT_FBX, "  Property[%d]: '%s' (type: %s)\n", 
+                        propertyCount++, propName, propType.GetName());
+            prop = fbxMaterial->GetNextProperty(prop);
+        }
+    }
+    
+    // Try to extract diffuse/base color with the exact property names from FBX ASCII analysis
+    const std::vector<std::string> colorNames = {
+        // 3ds Max Physical Material properties
+        "3dsMax|Parameters|base_color",
+        // PRIMARY: Properties confirmed in FBX ASCII
+        "DiffuseColor",    // All materials have this exact property
+        "AmbientColor",    // Fallback color property
+        // SECONDARY: Common variations
+        "base_color", "baseColor", "BaseColor", 
+        "diffuseColor", "diffuse_color",
+        "Color", "color", "Diffuse", "diffuse"
+    };
+    
+    if (extractColorProperty(colorNames, usdMaterial.diffuseColor)) {
+        foundAnyProperties = true;
+    }
+    
+    // Try to extract metallic with various naming conventions
+    const std::vector<std::string> metallicNames = {
+        "3dsMax|Parameters|metalness",
+        "metallic", "Metallic", "metalness", "Metalness",
+        "metal", "Metal"
+    };
+    
+    if (extractScalarProperty(metallicNames, usdMaterial.metallic)) {
+        foundAnyProperties = true;
+    }
+    
+    // Try to extract roughness with various naming conventions
+    const std::vector<std::string> roughnessNames = {
+        "3dsMax|Parameters|roughness",
+        "roughness", "Roughness", "specular_roughness", "SpecularRoughness",
+        "surface_roughness", "SurfaceRoughness"
+    };
+    
+    if (extractScalarProperty(roughnessNames, usdMaterial.roughness)) {
+        foundAnyProperties = true;
+    }
+    
+    // Try to extract emissive color with various naming conventions
+    const std::vector<std::string> emissiveNames = {
+        "emissive", "Emissive", "emissive_color", "EmissiveColor",
+        "emission", "Emission", "emission_color", "EmissionColor"
+    };
+    
+    if (extractColorProperty(emissiveNames, usdMaterial.emissiveColor)) {
+        foundAnyProperties = true;
+    }
+    
+    if (foundAnyProperties) {
+        TF_DEBUG_MSG(FILE_FORMAT_FBX, 
+                    "Successfully processed material '%s' using property-based approach\n",
+                    fbxMaterial->GetName());
+        return true;
+    }
+    
+    TF_DEBUG_MSG(FILE_FORMAT_FBX, 
+                "No recognizable properties found for material '%s'\n",
+                fbxMaterial->GetName());
+    return false;
+}
+
 // Returns a normalized path, using '/' as the separator. Note that if a component of the file path
 // has a '\' on POSIX systems, this would misinterpret that '\' as a directory separator. But
 // given that we don't know what OS the original path came from, this replacement is helpful
@@ -1258,39 +1537,30 @@ importFbxMaterials(ImportFbxContext& ctx)
             continue;
         }
 
-        const FbxImplementation* imp = LookForNonSupportedImplementation(material);
-        if (imp) { // This is a hardware shader
-            TF_WARN("Hardware shader not supported\n");
-            TF_DEBUG_MSG(FILE_FORMAT_FBX, " Language: %s\n", imp->Language.Get().Buffer());
-            TF_DEBUG_MSG(
-              FILE_FORMAT_FBX, " LanguageVersion: %s\n", imp->LanguageVersion.Get().Buffer());
-            TF_DEBUG_MSG(FILE_FORMAT_FBX, " RenderName: %s\n", imp->RenderName.Buffer());
-            TF_DEBUG_MSG(FILE_FORMAT_FBX, " RenderAPI: %s\n", imp->RenderAPI.Get().Buffer());
-            TF_DEBUG_MSG(
-              FILE_FORMAT_FBX, " RenderAPIVersion: %s\n", imp->RenderAPIVersion.Get().Buffer());
-            const FbxBindingTable* lRootTable = imp->GetRootTable();
-            FbxString filename = lRootTable->DescAbsoluteURL.Get();
-            FbxString techniqueName = lRootTable->DescTAG.Get();
-            continue;
-        }
-
-        Input ambientFactor;
-        Input diffuse;
-        Input diffuseFactor;
-        Input emissive;
-        Input emissiveFactor;
-        Input normal;
-        Input bump;
-        Input transparentColor;
-        Input transparencyFactor;
-        Input shininess;
-        Input specular;
-        Input specularFactor;
-        Input reflectionFactor;
-
+        // Try traditional Lambert/Phong casting
         FbxSurfaceLambert* lambert = FbxCast<FbxSurfaceLambert>(material);
         FbxSurfacePhong* phong = FbxCast<FbxSurfacePhong>(material);
-        if (lambert) {
+        
+        if (lambert || phong) {
+            // Traditional material processing - MOVED UP from below
+            TF_DEBUG_MSG(FILE_FORMAT_FBX, "Processing '%s' as Lambert/Phong material\n", 
+                        material->GetName());
+
+            Input ambientFactor;
+            Input diffuse;
+            Input diffuseFactor;
+            Input emissive;
+            Input emissiveFactor;
+            Input normal;
+            Input bump;
+            Input transparentColor;
+            Input transparencyFactor;
+            Input shininess;
+            Input specular;
+            Input specularFactor;
+            Input reflectionFactor;
+
+            if (lambert) {
             importPropTexture(ctx,
                               textures,
                               material,
@@ -1404,7 +1674,45 @@ importFbxMaterials(ImportFbxContext& ctx)
             }
         }
 
-        inputTranslator.translateNormals(bump, normal, um.normal);
+            inputTranslator.translateNormals(bump, normal, um.normal);
+        } else {
+            // Elegant fallback: Try property-based processing for materials that failed Lambert/Phong casting
+            TF_DEBUG_MSG(FILE_FORMAT_FBX, "Lambert/Phong casting failed for '%s', trying fallback approaches\n", 
+                        material->GetName());
+            
+            // First check if it's a hardware shader
+            const FbxImplementation* imp = LookForNonSupportedImplementation(material);
+            if (imp) {
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, "Detected hardware shader for '%s'\n", material->GetName());
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, " Language: %s\n", imp->Language.Get().Buffer());
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, " LanguageVersion: %s\n", imp->LanguageVersion.Get().Buffer());
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, " RenderName: %s\n", imp->RenderName.Buffer());
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, " RenderAPI: %s\n", imp->RenderAPI.Get().Buffer());
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, " RenderAPIVersion: %s\n", imp->RenderAPIVersion.Get().Buffer());
+                
+                // Try to extract properties from hardware shader
+                if (_processHardwareShaderMaterial(material, ctx, textures, um, inputTranslator)) {
+                    TF_DEBUG_MSG(FILE_FORMAT_FBX, "Successfully processed hardware shader '%s'\n",
+                                material->GetName());
+                    continue;
+                }
+                
+                TF_WARN("Hardware shader '%s' detected but no properties could be extracted\n", 
+                       material->GetName());
+                continue;
+            }
+            
+            // Try standard property-based fallback for non-hardware shader materials
+            if (_processUnknownShadingModel(material, ctx, textures, um, inputTranslator)) {
+                TF_DEBUG_MSG(FILE_FORMAT_FBX, "Successfully processed '%s' using property-based fallback\n",
+                            material->GetName());
+                continue;
+            }
+            
+            // If we get here, the material couldn't be processed by any method
+            TF_WARN("Unable to process material '%s' - no recognizable properties found\n", 
+                   material->GetName());
+        }
     }
     ctx.usd->images = std::move(inputTranslator.getImages());
 }
@@ -2010,7 +2318,14 @@ setSkeletonParents(ImportFbxContext& ctx)
 {
     int skeletonIndex = 0;
     for (const ImportedFbxSkeleton& skeleton : ctx.skeletons) {
-        int parentIndex = ctx.nodeMap[skeleton.fbxParent];
+        // Note: - if the skeleton was parented to FBX's artificial root node (which we do not
+        // represent in USD) we will not find it in the nodeMap. In that case it is better to parent
+        // it to the root node- we can use a parent index of -1 to do this.
+        int parentIndex = -1;
+        if (ctx.nodeMap.find(skeleton.fbxParent) != ctx.nodeMap.end()) {
+            parentIndex = ctx.nodeMap[skeleton.fbxParent];
+        }
+
         ctx.usd->skeletons[skeletonIndex].parent = parentIndex;
         skeletonIndex++;
     }
@@ -2238,7 +2553,8 @@ importFbx(const ImportFbxOptions& options, Fbx& fbx, UsdData& usd)
         importFbxMaterials(ctx);
     }
     if (options.importGeometry) {
-        triangulateMeshes(ctx);
+        if (options.triangulateMeshes)
+            triangulateMeshes(ctx);
         loadAnimLayers(ctx);
         importFBXSkeletons(ctx);
         importFbxNodeHierarchy(ctx);

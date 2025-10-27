@@ -4,21 +4,21 @@
             "Info": {
                 "SdfMetadata": {
                     "fbxAssetsPath": {
-                        "appliesTo": [ "prims" ], 
-                        "displayGroup": "Core", 
-                        "documentation:": "Path to store assets to, instead of resolving from the source file", 
+                        "appliesTo": [ "prims" ],
+                        "displayGroup": "Core",
+                        "documentation:": "Path to store assets to, instead of resolving from the source file",
                         "type": "string"
                     },
                     "fbxPhong": {
-                        "appliesTo": [ "prims" ], 
-                        "displayGroup": "Core", 
-                        "documentation:": "Whether to import phong (by default conversion only keeps the diffuse component)", 
+                        "appliesTo": [ "prims" ],
+                        "displayGroup": "Core",
+                        "documentation:": "Whether to import phong (by default conversion only keeps the diffuse component)",
                         "type": "bool"
                     },
                     "fbxAnimationStacks": {
-                        "appliesTo": [ "prims" ], 
-                        "displayGroup": "Core", 
-                        "documentation:": "Whether to import multiple animation stacks (by default only the first stack is imported)", 
+                        "appliesTo": [ "prims" ],
+                        "displayGroup": "Core",
+                        "documentation:": "Whether to import multiple animation stacks (by default only the first stack is imported)",
                         "type": "bool"
                     },
                     "fbxOriginalColorSpace": {
@@ -26,6 +26,12 @@
                         "displayGroup": "Core",
                         "documentation:": "Is the original colorspace in linear or sRGB",
                         "type": "string"
+                    },
+                    "triangulateMeshes": {
+                        "appliesTo": [ "prims" ],
+                        "displayGroup": "Core",
+                        "documentation:": "Whether to perform mesh triangulation at import",
+                        "type": "bool"
                     }
                 },
                 "Types": {

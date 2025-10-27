@@ -121,6 +121,34 @@ crossProduct(StlVec3f a, StlVec3f b)
     return product;
 }
 
+StlNormal
+calculateNormalOfFacet(StlFacet facet)
+{
+    StlNormal normal;
+
+    // compute facet normals from topology
+    StlVec3f faceEdge1;
+    faceEdge1.x = facet.vertices[1].x - facet.vertices[0].x;
+    faceEdge1.y = facet.vertices[1].y - facet.vertices[0].y;
+    faceEdge1.z = facet.vertices[1].z - facet.vertices[0].z;
+
+    StlVec3f faceEdge2;
+    faceEdge2.x = facet.vertices[2].x - facet.vertices[0].x;
+    faceEdge2.y = facet.vertices[2].y - facet.vertices[0].y;
+    faceEdge2.z = facet.vertices[2].z - facet.vertices[0].z;
+
+    normal = crossProduct(faceEdge1, faceEdge2);
+
+    // handle degenerate normals
+    if (normal.x == 0.f && normal.y == 0.f && normal.z == 0.f)
+        normal.y = 1.f; // Synthesize a valid normal. Actual value is irrelevant because
+                        // the triangle won't be visible
+
+    normal.normalize();
+
+    return normal;
+}
+
 bool
 isAsciiStl(std::ifstream& infile)
 {

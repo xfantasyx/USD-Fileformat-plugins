@@ -34,6 +34,7 @@ using namespace adobe::usd;
 
 const TfToken UsdGltfFileFormat::assetsPathToken("gltfAssetsPath", TfToken::Immortal);
 const TfToken UsdGltfFileFormat::animationTracksToken("gltfAnimationTracks", TfToken::Immortal);
+const TfToken UsdGltfFileFormat::computeBitangentsToken("computeBitangents", TfToken::Immortal);
 
 TF_DEFINE_PUBLIC_TOKENS(UsdGltfFileFormatTokens, USDGLTF_FILE_FORMAT_TOKENS);
 
@@ -61,9 +62,15 @@ UsdGltfFileFormat::InitData(const FileFormatArguments& args) const
         TF_DEBUG_MSG(
           FILE_FORMAT_GLTF, "FileFormatArg: %s = %s\n", arg.first.c_str(), arg.second.c_str());
     }
-    argReadBool(args, AdobeTokens->writeMaterialX.GetText(), pd->writeMaterialX, DEBUG_TAG);
-    argReadString(args, assetsPathToken.GetText(), pd->assetsPath, DEBUG_TAG);
-    argReadBool(args, animationTracksToken.GetText(), pd->animationTracks, DEBUG_TAG);
+    pd->parseFromFileFormatArgs(args, DEBUG_TAG);
+
+    // "gltfAssetsPath" is deprecated in favor of the universal "assetsPath" argument - 2025-3-18
+    // If both are present, "gltfAssetsPath" is stronger.
+    argReadString(args, assetsPathToken.GetString(), pd->assetsPath, DEBUG_TAG);
+    argWarnDeprecatedArg(args, assetsPathToken.GetString(), DEBUG_TAG);
+
+    argReadBool(args, animationTracksToken.GetString(), pd->animationTracks, DEBUG_TAG);
+    argReadBool(args, computeBitangentsToken.GetString(), pd->computeBitangents, DEBUG_TAG);
     return pd;
 }
 
@@ -157,12 +164,11 @@ UsdGltfFileFormat::Read(PXR_NS::SdfLayer* layer,
     options.importGeometry = true;
     options.importMaterials = true;
     options.importImages = true;
+    options.computeBitangents = data->computeBitangents;
     GUARD(importGltf(options, gltf, usd, resolvedPath), "Error translating glTF to USD\n");
 
-    WriteLayerOptions layerOptions;
-    layerOptions.writeMaterialX = data->writeMaterialX;
+    WriteLayerOptions layerOptions(*data);
     layerOptions.pruneJoints = false;
-    layerOptions.assetsPath = data->assetsPath;
     layerOptions.animationTracks = data->animationTracks;
     std::string ext = isAscii ? "GLTF" : "GLB";
     GUARD(
@@ -208,12 +214,11 @@ UsdGltfFileFormat::ReadFromString(SdfLayer* layer, const std::string& str) const
     options.importGeometry = true;
     options.importMaterials = true;
     options.importImages = true;
+    options.computeBitangents = data->computeBitangents;
     GUARD(importGltf(options, gltf, usd, ""), "Error translating glTF to USD\n");
 
-    WriteLayerOptions layerOptions;
-    layerOptions.writeMaterialX = data->writeMaterialX;
+    WriteLayerOptions layerOptions(*data);
     layerOptions.pruneJoints = false;
-    layerOptions.assetsPath = data->assetsPath;
     layerOptions.animationTracks = data->animationTracks;
     std::string ext = isAscii ? "GLTF" : "GLB";
     GUARD(

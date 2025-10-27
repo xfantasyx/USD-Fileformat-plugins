@@ -59,7 +59,7 @@ Allows importing obj from ZBrush with vertex color (#MRGB tag)
 
 **Export:**
 
-Meshes distributed in the node hierarchy in USD will be transformed by their global transform 
+Meshes distributed in the node hierarchy in USD will be transformed by their global transform
 during the export, since obj does not support nodes.
 Also, the resulting meshes are unitless (obj does not support units). No adjustments will be applied to the scale based on the input usd units. This is because obj readers in the industry make different assumptions on the units.
 
@@ -87,27 +87,52 @@ Also, the resulting meshes are unitless (obj does not support units). No adjustm
 
 **Import:**
 
-Example of how to pass a dynamic file format option to export images to a certain location.
-This makes the asset paths be pointing to newly generated images in the filesystem.
-Then the stage is exported to that same location.
-```
-from pxr import Usd
-stage = Usd.Stage.Open("assets/obj/car/Pony_Cartoon.obj:SDF_FORMAT_ARGS:objAssetsPath=assets-build")
-stage.Export("assets-build/car.usda")
-```
+* `assetsPath`: Filesystem path where image assets are saved to during import. Default is `""`
 
-By default, the plugin imports the diffuse component only, without specularities, but you can force to import the full phong model like this:
-```
-from pxr import Usd
-stage = Usd.Stage.Open("assets/obj/car.obj:SDF_FORMAT_ARGS:objAssetsPath=assets-build&objPhong=true")
-stage.Export("assets-build/car.usda")
-```
-The phong to PBR conversion follows https://docs.microsoft.com/en-us/azure/remote-rendering/reference/material-mapping. Keep in mind it is a lossy conversion.
-> Note: currently this only works when also providing objAssetsPath (TODO fix).
+    By default image textures used by the asset are not copied during import, but are kept in memory and are available
+    via an associated `ArResolver` plugin. By specifying a filesystem location via `assetsPath`, the import process will
+    copy the image textures to that location and provide asset paths to those locations in the generated USD data. This
+    file format argument allows an easy way to export associated images textures to disk when converting an asset to USD.
+
+    This snippet saves image textures to the path at `exportPath` during `Usd.Stage.Open` and then also exports the stage
+    to that same location, so that the USD data and the used images a co-located.
+    ```
+    from pxr import Usd
+    stage = Usd.Stage.Open("asset.obj:SDF_FORMAT_ARGS:assetsPath=exportPath")
+    stage.Export("exportPath/asset.usd")
+    ```
+
+* `objAssetsPath`: Deprecated in favor of `assetsPath`.
+
+* `writeUsdPreviewSurface`: Generate a UsdPreviewSurface based network for each material. Default is `true`
+
+    UsdPreviewSurface and its associated nodes are a universally understood USD material description
+    and all application should support them. The PBR capabilities are limited.
+
+* `writeASM`: Generate a ASM (Adobe Standard Material) based network for each material. Default is `true`
+
+    ASM is a standard supported by many Adobe applications with richer support for PBR capabilities.
+    It will be superseded by OpenPBR in the near future.
+
+* `writeOpenPBR`: Generate a OpenPBR based material network for each material. Default is `false`
+
+    OpenPBR is a new industry standard that will have wide spread support, but is still in its infancy.
+    The material network uses `MaterialX` nodes to express individual operations and has an `OpenPBR` surface,
+    which has rich support for PBR oriented materials.
+
+* `objPhong`: Turn on the full import of the Phong shading model. Default is `false`
+
+    By default, the plugin imports the diffuse component only, without specularities, but you can force the import of the full phong model like this:
+    ```
+    from pxr import Usd
+    stage = Usd.Stage.Open("asset.obj:SDF_FORMAT_ARGS:objPhong=true&assetsPath=exportPath")
+    stage.Export("exportPath/asset.usd")
+    ```
+    The phong to PBR conversion follows https://docs.microsoft.com/en-us/azure/remote-rendering/reference/material-mapping.
+    Keep in mind it is a lossy conversion.
+    > Note: currently this only works when also providing assetsPath (TODO fix).
 
 ## Debug codes
 * `FILE_FORMAT_OBJ`: Common debug messages.
 * OBJ_PACKAGE_RESOLVER
-
-
 

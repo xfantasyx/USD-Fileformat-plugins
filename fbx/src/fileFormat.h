@@ -10,6 +10,7 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 #pragma once
+
 #ifdef _MSC_VER
 // Disable warnings in the pxr headers.
 // conversion from 'double' to 'float', possible loss of data
@@ -19,12 +20,15 @@ governing permissions and limitations under the License.
 // truncation from 'double' to 'float'
 #    pragma warning(disable : 4305)
 #endif // _MSC_VER
+
 #include "api.h"
-#include <iosfwd>
 #include <fileformatutils/sdfUtils.h>
+
 #include <pxr/base/tf/staticTokens.h>
 #include <pxr/usd/pcp/dynamicFileFormatInterface.h>
 #include <pxr/usd/sdf/data.h>
+
+#include <iosfwd>
 #include <string>
 #include <version.h>
 
@@ -43,9 +47,9 @@ TF_DECLARE_WEAK_AND_REF_PTRS(FbxData);
 class FbxData : public FileFormatDataBase
 {
   public:
-    std::string assetsPath;
-    bool phong = false;
     bool animationStacks = false;
+    bool phong = false;
+    bool triangulateMeshes = true;
     TfToken originalColorSpace;
     static FbxDataRefPtr InitData(const SdfFileFormat::FileFormatArguments& args);
 };
@@ -95,10 +99,11 @@ class USDFBX_API UsdFbxFileFormat
       const FileFormatArguments& args = FileFormatArguments()) const override;
 
   protected:
-    static const TfToken assetsPathToken;
-    static const TfToken phongToken;
-    static const TfToken originalColorSpaceToken;
     static const TfToken animationStacksToken;
+    static const TfToken assetsPathToken;
+    static const TfToken originalColorSpaceToken;
+    static const TfToken phongToken;
+    static const TfToken triangulateMeshesToken;
 
     SDF_FILE_FORMAT_FACTORY_ACCESS;
     ~UsdFbxFileFormat() override;

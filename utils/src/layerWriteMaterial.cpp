@@ -49,6 +49,13 @@ _createFallbackValue(const VtValue& value)
     }
 }
 
+// Convert a TfToken to a VtValue, but keep the VtValue empty if the TfToken was empty
+VtValue
+_checkToken(const TfToken& token)
+{
+    return token.IsEmpty() ? VtValue() : VtValue(token);
+}
+
 SdfPath
 _createStReader(SdfAbstractData* sdfData, const SdfPath& parentPath, int uvIndex)
 {
@@ -71,8 +78,7 @@ _createStTransform(SdfAbstractData* sdfData,
                    const Input& input,
                    const SdfPath& stReaderResultPath)
 {
-    if (input.transformRotation.IsEmpty() && input.transformScale.IsEmpty() &&
-        input.transformTranslation.IsEmpty()) {
+    if (input.hasDefaultTransform()) {
         return stReaderResultPath;
     }
 
@@ -81,9 +87,9 @@ _createStTransform(SdfAbstractData* sdfData,
                         TfToken(name + "_stTransform"),
                         AdobeTokens->UsdTransform2d,
                         "result",
-                        { { "rotation", input.transformRotation },
-                          { "scale", input.transformScale },
-                          { "translation", input.transformTranslation } },
+                        { { "rotation", input.uvRotation },
+                          { "scale", input.uvScale },
+                          { "translation", input.uvTranslation } },
                         { { "in", stReaderResultPath } });
 }
 
@@ -103,17 +109,22 @@ _createTextureReader(SdfAbstractData* sdfData,
     // attribute on the material and connect all corresponding texture readers to that attribute
     // value.
 
-    // Make sure the colorSpace is an empty VtValue if the TfToken for colorspace is empty
-    VtValue colorSpace = input.colorspace.IsEmpty() ? VtValue() : VtValue(input.colorspace);
-
+    // Only emit scale and bias if they are not the default values
+    VtValue scale, bias;
+    if (input.scale != kDefaultTexScale) {
+        scale = input.scale;
+    }
+    if (input.bias != kDefaultTexBias) {
+        bias = input.bias;
+    }
     InputValues inputValues = { { "fallback", _createFallbackValue(input.value) },
-                                { "sourceColorSpace", colorSpace },
-                                { "wrapS", input.wrapS },
-                                { "wrapT", input.wrapT },
-                                { "minFilter", input.minFilter },
-                                { "magFilter", input.magFilter },
-                                { "scale", input.scale },
-                                { "bias", input.bias } };
+                                { "sourceColorSpace", _checkToken(input.colorspace) },
+                                { "wrapS", _checkToken(input.wrapS) },
+                                { "wrapT", _checkToken(input.wrapT) },
+                                { "minFilter", _checkToken(input.minFilter) },
+                                { "magFilter", _checkToken(input.magFilter) },
+                                { "scale", scale },
+                                { "bias", bias } };
     InputConnections inputConnections = { { "st", stResultPath }, { "file", textureConnection } };
 
     return createShader(sdfData,
@@ -195,7 +206,7 @@ _setupInput(WriteSdfContext& ctx,
 void
 writeUsdPreviewSurface(WriteSdfContext& ctx,
                        const SdfPath& materialPath,
-                       const Material& material,
+                       const OpenPbrMaterial& material,
                        MaterialInputs& materialInputs)
 {
     SdfPath p;
@@ -226,23 +237,30 @@ writeUsdPreviewSurface(WriteSdfContext& ctx,
                         materialInputs);
     };
 
-    writeInput(AdobeTokens->useSpecularWorkflow, material.useSpecularWorkflow);
-    writeInput(AdobeTokens->diffuseColor, material.diffuseColor);
-    writeInput(AdobeTokens->emissiveColor, material.emissiveColor);
-    writeInput(AdobeTokens->specularColor, material.specularColor);
-    writeInput(AdobeTokens->normal, material.normal);
-    writeInput(AdobeTokens->metallic, material.metallic);
-    writeInput(AdobeTokens->roughness, material.roughness);
-    writeInput(AdobeTokens->clearcoat, material.clearcoat);
-    writeInput(AdobeTokens->clearcoatRoughness, material.clearcoatRoughness);
-    writeInput(AdobeTokens->opacity, material.opacity);
-    writeInput(AdobeTokens->opacityThreshold, material.opacityThreshold);
-    writeInput(AdobeTokens->displacement, material.displacement);
-    writeInput(AdobeTokens->occlusion, material.occlusion);
-    writeInput(AdobeTokens->ior, material.ior);
+    writeInput(UsdPreviewSurfaceTokens->diffuseColor, material.base_color);
+    // XXX Multiply with emission_luminance? Also, what about the units (OpenPBR is in nits)?
+    writeInput(UsdPreviewSurfaceTokens->emissiveColor, material.emission_color);
+    if (material.useSpecularWorkflow) {
+        writeInput(UsdPreviewSurfaceTokens->useSpecularWorkflow, Input{ VtValue(1) });
+    }
+    writeInput(UsdPreviewSurfaceTokens->specularColor, material.specular_color);
+    writeInput(UsdPreviewSurfaceTokens->metallic, material.base_metalness);
+    writeInput(UsdPreviewSurfaceTokens->roughness, material.specular_roughness);
+    writeInput(UsdPreviewSurfaceTokens->clearcoat, material.coat_weight);
+    writeInput(UsdPreviewSurfaceTokens->clearcoatRoughness, material.coat_roughness);
+    writeInput(UsdPreviewSurfaceTokens->opacity, material.geometry_opacity);
+    // UsdPreviewSurfaceTokens->opacityMode (no source data)
+    if (material.opacityThreshold > 0.0f) {
+        writeInput(UsdPreviewSurfaceTokens->opacityThreshold,
+                   Input{ VtValue(material.opacityThreshold) });
+    }
+    writeInput(UsdPreviewSurfaceTokens->ior, material.specular_ior);
+    writeInput(UsdPreviewSurfaceTokens->normal, material.geometry_normal);
+    writeInput(UsdPreviewSurfaceTokens->displacement, material.displacement);
+    writeInput(UsdPreviewSurfaceTokens->occlusion, material.occlusion);
     // If we don't have opacity, but we do have transmission, we wire it into opacity
-    if (material.opacity.isEmpty() && !material.transmission.isEmpty()) {
-        writeInput(AdobeTokens->opacity, invertInput(material.transmission));
+    if (material.geometry_opacity.isEmpty() && !material.transmission_weight.isEmpty()) {
+        writeInput(UsdPreviewSurfaceTokens->opacity, invertInput(material.transmission_weight));
     }
 
     // Create UsdPreviewSurface shader
@@ -272,7 +290,7 @@ writeUsdPreviewSurface(WriteSdfContext& ctx,
 void
 writeAsmMaterial(WriteSdfContext& ctx,
                  const SdfPath& materialPath,
-                 const Material& material,
+                 const OpenPbrMaterial& material,
                  MaterialInputs& materialInputs)
 {
     SdfPath p;
@@ -304,62 +322,65 @@ writeAsmMaterial(WriteSdfContext& ctx,
     // Currently unused inputs
     // Input useSpecularWorkflow;
 
-    writeInput(AdobeTokens->baseColor, material.diffuseColor);
-    writeInput(AdobeTokens->roughness, material.roughness);
-    writeInput(AdobeTokens->metallic, material.metallic);
-    writeInput(AdobeTokens->opacity, material.opacity);
+    writeInput(AsmTokens->baseColor, material.base_color);
+    writeInput(AsmTokens->roughness, material.specular_roughness);
+    writeInput(AsmTokens->metallic, material.base_metalness);
+    writeInput(AsmTokens->opacity, material.geometry_opacity);
+    writeInput(AsmTokens->specularLevel, material.specular_weight);
+    writeInput(AsmTokens->specularEdgeColor, material.specular_color);
+    writeInput(AsmTokens->normal, material.geometry_normal);
+    if (material.normalScale != 1.0f) {
+        writeInput(AsmTokens->normalScale, Input{ VtValue(material.normalScale) });
+    }
+    // combineNormalAndHeight = false (flag) (no source info)
+    writeInput(AsmTokens->height, material.displacement);
+    // heightScale (no source info)
+    // heightLevel (no source info)
+    writeInput(AsmTokens->anisotropyLevel, material.specular_roughness_anisotropy);
+    // Note, this is just a pass through. OpenPBR does not support an anisotropy angle input
+    writeInput(AsmTokens->anisotropyAngle, material.anisotropyAngle);
+    writeInput(AsmTokens->emissiveIntensity, material.emission_luminance);
+    writeInput(AsmTokens->emissive, material.emission_color);
+    writeInput(AsmTokens->sheenOpacity, material.fuzz_weight);
+    writeInput(AsmTokens->sheenColor, material.fuzz_color);
+    writeInput(AsmTokens->sheenRoughness, material.fuzz_roughness);
+    writeInput(AsmTokens->translucency, material.transmission_weight);
+    writeInput(AsmTokens->IOR, material.specular_ior);
+    // XXX This is only correct when transmission_dispersion_abbe_number is at the default of 20
+    writeInput(AsmTokens->dispersion, material.transmission_dispersion_scale);
+    writeInput(AsmTokens->absorptionColor, material.transmission_color);
+    writeInput(AsmTokens->absorptionDistance, material.transmission_depth);
+    // XXX subsurface_weight could be a textured floating point value. We currently don't have a
+    // way to express that with ASM
+    if (!material.subsurface_weight.isEmpty()) {
+        inputValues.emplace_back("scatter", true);
+    }
+    writeInput(AsmTokens->scatteringColor, material.subsurface_color);
+    writeInput(AsmTokens->scatteringDistance, material.subsurface_radius);
+    // XXX a precise value conversion is rather complicated
+    writeInput(AsmTokens->scatteringDistanceScale, material.subsurface_radius_scale);
+    // scatteringRedShift (no source info)
+    // scatteringRayleigh (no source info)
+    writeInput(AsmTokens->coatOpacity, material.coat_weight);
+    writeInput(AsmTokens->coatColor, material.coat_color);
+    writeInput(AsmTokens->coatRoughness, material.coat_roughness);
+    writeInput(AsmTokens->coatIOR, material.coat_ior);
+    // Note, this is just a pass through. OpenPBR does not support a coatSpecularLevel input
+    writeInput(AsmTokens->coatSpecularLevel, material.coatSpecularLevel);
+    writeInput(AsmTokens->coatNormal, material.geometry_coat_normal);
+    // coatNormalScale (the scale is part of the coatNormal `scale` or `value`)
+    writeInput(AsmTokens->ambientOcclusion, material.occlusion);
+    // Note, this is just a pass through. OpenPBR does not support a volumeThickness input
+    writeInput(AsmTokens->volumeThickness, material.volumeThickness);
+    // volumeThicknessScale (the scale is part of the volumeThickness `scale` or `value`)
 
     // Note, ASM does not support an opacityThreshold. But without storing it here, the
     // information is lost and can't be round tripped. So we store it, even though we know it
     // won't affect the result of the material
-    writeInput(AdobeTokens->opacityThreshold, material.opacityThreshold);
-    writeInput(AdobeTokens->specularLevel, material.specularLevel);
-    // XXX should this be gated by material.useSpecularWorkflow?
-    writeInput(AdobeTokens->specularEdgeColor, material.specularColor);
-    writeInput(AdobeTokens->normal, material.normal);
-    writeInput(AdobeTokens->normalScale, material.normalScale);
-    // combineNormalAndHeight = false (flag) (no source info)
-    writeInput(AdobeTokens->height, material.displacement);
-    // heightScale (no source info)
-    // heightLevel (no source info)
-    writeInput(AdobeTokens->anisotropyLevel, material.anisotropyLevel);
-    writeInput(AdobeTokens->anisotropyAngle, material.anisotropyAngle);
-
-    // Turn on emission if we have a valid input
-    if (!material.emissiveColor.isEmpty()) {
-        // The intensity is part of the emissive `scale` or `value` of the emissiveColor input
-        inputValues.emplace_back("emissiveIntensity", 1.0f);
+    if (material.opacityThreshold > 0.0f) {
+        writeInput(UsdPreviewSurfaceTokens->opacityThreshold,
+                   Input{ VtValue(material.opacityThreshold) });
     }
-    writeInput(AdobeTokens->emissive, material.emissiveColor);
-    if (!material.sheenColor.isEmpty()) {
-        // XXX We currently turn the sheen fully on if the asset has a sheen color specified
-        inputValues.emplace_back("sheenOpacity", 1.0f);
-    }
-    writeInput(AdobeTokens->sheenColor, material.sheenColor);
-    writeInput(AdobeTokens->sheenRoughness, material.sheenRoughness);
-    writeInput(AdobeTokens->translucency, material.transmission);
-    writeInput(AdobeTokens->IOR, material.ior);
-    // dispersion (no source info)
-    writeInput(AdobeTokens->absorptionColor, material.absorptionColor);
-    writeInput(AdobeTokens->absorptionDistance, material.absorptionDistance);
-    if (!material.scatteringColor.isEmpty() || !material.scatteringDistance.isEmpty()) {
-        inputValues.emplace_back("scatter", true);
-    }
-    writeInput(AdobeTokens->scatteringColor, material.scatteringColor);
-    writeInput(AdobeTokens->scatteringDistance, material.scatteringDistance);
-    // scatteringDistanceScale (the scale is part of the scatteringDistance `scale` or `value`)
-    // scatteringRedShift (no source info)
-    // scatteringRayleigh (no source info)
-    writeInput(AdobeTokens->coatOpacity, material.clearcoat);
-    writeInput(AdobeTokens->coatColor, material.clearcoatColor);
-    writeInput(AdobeTokens->coatRoughness, material.clearcoatRoughness);
-    writeInput(AdobeTokens->coatIOR, material.clearcoatIor);
-    writeInput(AdobeTokens->coatSpecularLevel, material.clearcoatSpecular);
-    writeInput(AdobeTokens->coatNormal, material.clearcoatNormal);
-    // coatNormalScale (the scale is part of the coatNormal `scale` or `value`)
-    writeInput(AdobeTokens->ambientOcclusion, material.occlusion);
-    writeInput(AdobeTokens->volumeThickness, material.volumeThickness);
-    // volumeThicknessScale (the scale is part of the volumeThickness `scale` or `value`)
 
     // Create Adobe Standard Material shader
     SdfPath outputPath = createShader(ctx.sdfData,
@@ -372,11 +393,11 @@ writeAsmMaterial(WriteSdfContext& ctx,
     createShaderOutput(
       ctx.sdfData, materialPath, "adobe:surface", SdfValueTypeNames->Token, outputPath);
 
+    SdfPath surfaceShaderPath = parentPath.AppendChild(AdobeTokens->ASM);
     if (material.isUnlit) {
-        SdfPath p = createAttributeSpec(ctx.sdfData,
-                                        parentPath.AppendChild(AdobeTokens->ASM),
-                                        AdobeTokens->unlit,
-                                        SdfValueTypeNames->Bool);
+        // Author a custom attribute to leave an indicator that this material should be unlit
+        SdfPath p = createAttributeSpec(
+          ctx.sdfData, surfaceShaderPath, AdobeTokens->unlit, SdfValueTypeNames->Bool);
         setAttributeMetadata(ctx.sdfData, p, SdfFieldKeys->Custom, VtValue(true));
         setAttributeDefaultValue(ctx.sdfData, p, true);
     }
@@ -384,7 +405,7 @@ writeAsmMaterial(WriteSdfContext& ctx,
     if (material.clearcoatModelsTransmissionTint) {
         // Author a custom attribute to leave an indicator where the clearcoat came from
         SdfPath p = createAttributeSpec(ctx.sdfData,
-                                        parentPath.AppendChild(AdobeTokens->ASM),
+                                        surfaceShaderPath,
                                         AdobeTokens->clearcoatModelsTransmissionTint,
                                         SdfValueTypeNames->Bool);
         setAttributeMetadata(ctx.sdfData, p, SdfFieldKeys->Custom, VtValue(true));

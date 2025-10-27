@@ -24,9 +24,10 @@ set(HEADERS
     "transforms.h"
     "images.h"
     "layerRead.h"
+    "layerReadMaterial.h"
     "layerWriteShared.h"
     "layerWriteMaterial.h"
-    "layerWriteMaterialX.h"
+    "layerWriteOpenPBR.h"
     "layerWriteSdfData.h"
     "materials.h"
     "neuralAssetsHelper.h"
@@ -44,9 +45,10 @@ set(SOURCES
     "transforms.cpp"
     "images.cpp"
     "layerRead.cpp"
+    "layerReadMaterial.cpp"
     "layerWriteShared.cpp"
     "layerWriteMaterial.cpp"
-    "layerWriteMaterialX.cpp"
+    "layerWriteOpenPBR.cpp"
     "layerWriteSdfData.cpp"
     "materials.cpp"
     "neuralAssetsHelper.cpp"
@@ -87,6 +89,7 @@ target_include_directories(fileformatUtils
 target_link_libraries(fileformatUtils
 PUBLIC
     OpenImageIO::OpenImageIO
+    OpenImageIO::OpenImageIO_Util
     tf
     sdf
     usd
@@ -122,3 +125,7 @@ if(USD_FILEFORMATS_BUILD_TESTS)
 endif()
 
 install(TARGETS fileformatUtils)
+
+if(USD_FILEFORMATS_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

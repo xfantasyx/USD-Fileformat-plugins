@@ -40,6 +40,8 @@
 
 ## Translation Notes
 
+Geometric normals will calculated and used on both import and export. Custom per-face normals will be ignored and are not supported at this point.
+
 **Import:**
 
 The generated USD will be set with up axis = +z as that's the most common for stl files.
@@ -47,7 +49,8 @@ The generated USD will be set with up axis = +z as that's the most common for st
 ## File Format Arguments
 
 **Export:**
-* `exportAscii`: If true, the stl file will be in ascii format, otherwise in binary format.
+* `exportAscii`: If true, the stl file will be in ascii format, otherwise in binary format. (Note: there is currently a known bug, where the file may still export in binary regardless of this setting)
+
 Example:
 ```
 #usda 1.0

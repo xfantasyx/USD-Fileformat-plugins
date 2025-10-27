@@ -21,21 +21,21 @@
                             "type": "dictionary"
                     },
                     "writeASM": {
-                        "appliesTo": [ "prims" ], 
-                        "displayGroup": "Core", 
-                        "documentation:": "Whether to write ASM shader", 
+                        "appliesTo": [ "prims" ],
+                        "displayGroup": "Core",
+                        "documentation:": "Whether to write ASM shader",
                         "type": "bool"
                     },
                     "writeUsdPreviewSurface": {
-                        "appliesTo": [ "prims" ], 
-                        "displayGroup": "Core", 
-                        "documentation:": "Whether to write USD Preview Surface shader", 
+                        "appliesTo": [ "prims" ],
+                        "displayGroup": "Core",
+                        "documentation:": "Whether to write USD Preview Surface shader",
                         "type": "bool"
                     },
-                    "writeMaterialX": {
-                        "appliesTo": [ "prims" ], 
-                        "displayGroup": "Core", 
-                        "documentation:": "Whether to write MaterialX shader", 
+                    "writeOpenPBR": {
+                        "appliesTo": [ "prims" ],
+                        "displayGroup": "Core",
+                        "documentation:": "Whether to write MaterialX shader",
                         "type": "bool"
                     }
                 },
@@ -75,9 +75,9 @@
                         "imageTypes": ["sbsarimage"]
                     },
                     "SbsarConfig": {
-                        "assetCacheSize": 1000000000,
-                        "inputImageCacheSize": 1000000000,
-                        "packageCacheSize": 10
+                        "assetCacheSize": ${USDSBSAR_CACHE_SIZE},
+                        "inputImageCacheSize": ${USDSBSAR_IMAGE_CACHE_SIZE},
+                        "packageCacheSize": ${USDSBSAR_PACKAGE_LIMIT}
                     }
                 }
             },

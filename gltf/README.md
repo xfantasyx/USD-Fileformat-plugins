@@ -77,6 +77,7 @@ During material import, the ASM shading model is used as an intermediate transpo
 | KHR_materials_unlit |❌|
 | KHR_materials_variants |❌|
 | KHR_materials_volume |✅|
+| KHR_materials_volume_scatter |✅|
 | KHR_mesh_quantization |❌|
 | KHR_texture_basisu |❌|
 | KHR_texture_transform |✅|Written to a UsdTransform2d node|
@@ -86,6 +87,7 @@ During material import, the ASM shading model is used as an intermediate transpo
 | EXT_texture_webp |✅|
 | ADOBE_materials_clearcoat_specular |✅|
 | ADOBE_materials_clearcoat_tint |✅|
+| EXT_materials_clearcoat_color |✅|
 | KHR_materials_pbrSpecularGlossiness |✅|
 
 Anisotropy
@@ -130,7 +132,7 @@ Export can optionally make use glTF material extensions.
 
 During material export, the ASM shading model is used as an intermediate transport layer.
 
-If the material extensions are turned off, transmission is transcoded into opacity 
+If the material extensions are turned off, transmission is transcoded into opacity
 to preserve glass and similar translucent materials as best as possible.
 
 Export of node TRS works for animated nodes, but not for static ones at the moment.
@@ -141,36 +143,67 @@ Mesh bounding box exported as min and max accessor bounds in glTF.
 
 **Import:**
 
-* `gltfAssetsPath`: Filesystem path where image assets are saved to.
-    The default is that image assets are not copied, but the generated usd file will resolve them from the original file.
-    The following saves images to the path `myPath` during `UsdStage::Open` and then exports the stage to that same path.
+* `assetsPath`: Filesystem path where image assets are saved to during import. Default is `""`
+
+    By default image textures used by the asset are not copied during import, but are kept in memory and are available
+    via an associated `ArResolver` plugin. By specifying a filesystem location via `assetsPath`, the import process will
+    copy the image textures to that location and provide asset paths to those locations in the generated USD data. This
+    file format argument allows an easy way to export associated images textures to disk when converting an asset to USD.
+
+    This snippet saves image textures to the path at `exportPath` during `Usd.Stage.Open` and then also exports the stage
+    to that same location, so that the USD data and the used images a co-located.
     ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.gltf:SDF_FORMAT_ARGS:gltfAssetsPath=myPath")
-    stage->Export("myPath/cube.usd")
+    from pxr import Usd
+    stage = Usd.Stage.Open("asset.gltf:SDF_FORMAT_ARGS:assetsPath=exportPath")
+    stage.Export("exportPath/asset.usd")
     ```
+
+* `gltfAssetsPath`: Deprecated in favor of `assetsPath`.
+
+* `writeUsdPreviewSurface`: Generate a UsdPreviewSurface based network for each material. Default is `true`
+
+    UsdPreviewSurface and its associated nodes are a universally understood USD material description
+    and all application should support them. The PBR capabilities are limited.
+
+* `writeASM`: Generate a ASM (Adobe Standard Material) based network for each material. Default is `true`
+
+    ASM is a standard supported by many Adobe applications with richer support for PBR capabilities.
+    It will be superseded by OpenPBR in the near future.
+
+* `writeOpenPBR`: Generate a OpenPBR based material network for each material. Default is `false`
+
+    OpenPBR is a new industry standard that will have wide spread support, but is still in its infancy.
+    The material network uses `MaterialX` nodes to express individual operations and has an `OpenPBR` surface,
+    which has rich support for PBR oriented materials.
+
+* `gltfAnimationStacks`: Import multiple animation tracks. Default is `false`
+
+    By default only the first animation track is imported.
+    It is only recommended to use this parameter in order to convert from GLTF to another format that supports multiple
+    animation tracks, such as FBX. It is not recommended to export a .usd file after importing a file with this parameter
+    set, as there is no standard way to encode this information.
+
+    The following allows additional animation tracks to be imported, and adds metadata to USD to encode where each track
+    begins and ends. The exporter can then read this metadata to export the tracks properly.
+    ```
+    from pxr import Usd
+    stage = Usd.Stage.Open("animAsset.gltf:SDF_FORMAT_ARGS:gltfAnimationStacks=true")
+    stage.Export("animAsset.fbx")
+    ```
+
 
 **Export:**
 
 * `embedImages` Embed images, as base64 for `gltf` or as binary data for `glb`. Default is `true`.
+
     The following exports to `glb` and does not embed images:
     ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.usd");
-    SdfLayer::FileFormatArguments args = { {"embedImages", "false"} };
-    stage->Export("cube.glb", false, args);
+    from pxr import Usd
+    stage = Usd.Stage.Open("cube.usd");
+    stage.Export("cube.glb", args={ "embedImages": "false" });
     ```
-* `useMaterialExtensions`: Use glTF material extensions. Default is `true`.
 
-* `gltfAnimationTracks`: Import multiple animation tracks. Default is `false`
-    The default is that only the first animation track is imported.
-    It is only recommended to use this parameter in order to convert from gltf to another format, such as GLTF.
-    It is not recommended to export a .usd file after importing a file with this parameter set.
-    ```
-    The following allows additional animation tracks to be imported, and adds metadata to USD to encode where
-    each track begins and ends. The exporter can then read this metadata to export the tracks properly.
-    ```
-    UsdStageRefPtr stage = UsdStage::Open("cube.gltf:SDF_FORMAT_ARGS:gltfAnimationTracks=true")
-    stage->Export("myPath/cube.gltf")
-    ```
+* `useMaterialExtensions`: Use glTF material extensions. Default is `true`.
 
 ## Debug codes
 * `FILE_FORMAT_GLTF`: Common debug messages.

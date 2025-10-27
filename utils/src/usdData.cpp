@@ -63,11 +63,8 @@ bool
 Input::isZeroTexture() const
 {
     // If scale and bias are zero, the texture will only produce zero values
-    PXR_NS::GfVec4f scaleValue = scale.GetWithDefault(PXR_NS::GfVec4f(1.0f));
-    PXR_NS::GfVec4f biasValue = bias.GetWithDefault(PXR_NS::GfVec4f(0.0f));
     // Note, we're only checking the first three, since the multipliers are usually stored there
-    return scaleValue[0] == 0.0f && scaleValue[1] == 0.0f && scaleValue[2] == 0.0f &&
-           biasValue == PXR_NS::GfVec4f(0.0f);
+    return scale[0] == 0.0f && scale[1] == 0.0f && scale[2] == 0.0f && bias == kDefaultTexBias;
 }
 
 bool
@@ -95,10 +92,8 @@ invertInput(const Input& in)
         // Invert transformation is: (-1)y + (+1) = (-1)(scale)x + (-1)(bias) + (+1)
         //                                          -----------    -----------------
         //                                           newScale       newBias
-        GfVec4f oldScale = in.scale.GetWithDefault(GfVec4f(1.0f));
-        GfVec4f oldBias = in.bias.GetWithDefault(GfVec4f(0.0f));
-        out.scale = -oldScale;
-        out.bias = -oldBias + GfVec4f(1.0f);
+        out.scale = -in.scale;
+        out.bias = -in.bias + GfVec4f(1.0f);
     } else if (!in.value.IsEmpty()) {
         if (in.value.IsHolding<float>()) {
             out.value = 1.0f - in.value.UncheckedGet<float>();
@@ -120,9 +115,7 @@ printInput(const TfToken& name, const Input& input)
     ss << "\n    " << std::setfill(' ') << std::setw(20) << std::left << name.GetString() << ": ";
     if (input.image >= 0) {
         ss << std::setfill(' ') << std::setw(3) << std::right << input.image
-           << ", ch: " << std::setfill(' ') << std::setw(4) << std::right
-           << input.channel
-           // << ", ch: " << input.channel
+           << ", ch: " << std::setfill(' ') << std::setw(4) << std::right << input.channel
            << ", uv: " << input.uvIndex;
         if (!input.wrapS.IsEmpty()) {
             ss << ", wrapS: " << input.wrapS;
@@ -139,21 +132,11 @@ printInput(const TfToken& name, const Input& input)
         if (!input.colorspace.IsEmpty()) {
             ss << ", colorspace: " << input.colorspace;
         }
-        if (!input.bias.IsEmpty()) {
-            ss << ", bias: " << input.bias;
-        }
-        if (!input.scale.IsEmpty()) {
-            ss << ", scale: " << input.scale;
-        }
-        if (!input.transformRotation.IsEmpty()) {
-            ss << ", stRot: " << input.transformRotation;
-        }
-        if (!input.transformScale.IsEmpty()) {
-            ss << ", stScale: " << input.transformScale;
-        }
-        if (!input.transformTranslation.IsEmpty()) {
-            ss << ", stTrans: " << input.transformTranslation;
-        }
+        ss << ", scale: " << input.scale;
+        ss << ", bias: " << input.bias;
+        ss << ", stRot: " << input.uvRotation;
+        ss << ", stScale: " << input.uvScale;
+        ss << ", stTrans: " << input.uvTranslation;
     } else if (!input.value.IsEmpty()) {
         ss << std::setprecision(3);
         ss << "<";
@@ -202,36 +185,38 @@ printMaterial(const std::string& header,
       debugTag.c_str(),
       header.c_str(),
       path.GetAsString().c_str(),
-      printInput(AdobeTokens->useSpecularWorkflow, material.useSpecularWorkflow).c_str(),
-      printInput(AdobeTokens->diffuseColor, material.diffuseColor).c_str(),
-      printInput(AdobeTokens->emissiveColor, material.emissiveColor).c_str(),
-      printInput(AdobeTokens->specularLevel, material.specularLevel).c_str(),
-      printInput(AdobeTokens->specularColor, material.specularColor).c_str(),
-      printInput(AdobeTokens->normal, material.normal).c_str(),
-      printInput(AdobeTokens->normalScale, material.normalScale).c_str(),
-      printInput(AdobeTokens->metallic, material.metallic).c_str(),
-      printInput(AdobeTokens->roughness, material.roughness).c_str(),
-      printInput(AdobeTokens->coatOpacity, material.clearcoat).c_str(),
-      printInput(AdobeTokens->coatColor, material.clearcoatColor).c_str(),
-      printInput(AdobeTokens->coatRoughness, material.clearcoatRoughness).c_str(),
-      printInput(AdobeTokens->coatIOR, material.clearcoatIor).c_str(),
-      printInput(AdobeTokens->coatSpecularLevel, material.clearcoatSpecular).c_str(),
-      printInput(AdobeTokens->coatNormal, material.clearcoatNormal).c_str(),
-      printInput(AdobeTokens->sheenColor, material.sheenColor).c_str(),
-      printInput(AdobeTokens->sheenRoughness, material.sheenRoughness).c_str(),
-      printInput(AdobeTokens->anisotropyLevel, material.anisotropyLevel).c_str(),
-      printInput(AdobeTokens->anisotropyAngle, material.anisotropyAngle).c_str(),
-      printInput(AdobeTokens->opacity, material.opacity).c_str(),
-      printInput(AdobeTokens->opacityThreshold, material.opacityThreshold).c_str(),
-      printInput(AdobeTokens->displacement, material.displacement).c_str(),
-      printInput(AdobeTokens->occlusion, material.occlusion).c_str(),
-      printInput(AdobeTokens->ior, material.ior).c_str(),
-      printInput(AdobeTokens->translucency, material.transmission).c_str(),
-      printInput(AdobeTokens->volumeThickness, material.volumeThickness).c_str(),
-      printInput(AdobeTokens->absorptionDistance, material.absorptionDistance).c_str(),
-      printInput(AdobeTokens->absorptionColor, material.absorptionColor).c_str(),
-      printInput(AdobeTokens->scatteringDistance, material.scatteringDistance).c_str(),
-      printInput(AdobeTokens->scatteringColor, material.scatteringColor).c_str(),
+      printInput(UsdPreviewSurfaceTokens->useSpecularWorkflow, material.useSpecularWorkflow)
+        .c_str(),
+      printInput(UsdPreviewSurfaceTokens->diffuseColor, material.diffuseColor).c_str(),
+      printInput(UsdPreviewSurfaceTokens->emissiveColor, material.emissiveColor).c_str(),
+      printInput(AsmTokens->specularLevel, material.specularLevel).c_str(),
+      printInput(UsdPreviewSurfaceTokens->specularColor, material.specularColor).c_str(),
+      printInput(AsmTokens->normal, material.normal).c_str(),
+      printInput(AsmTokens->normalScale, material.normalScale).c_str(),
+      printInput(AsmTokens->metallic, material.metallic).c_str(),
+      printInput(AsmTokens->roughness, material.roughness).c_str(),
+      printInput(AsmTokens->coatOpacity, material.clearcoat).c_str(),
+      printInput(AsmTokens->coatColor, material.clearcoatColor).c_str(),
+      printInput(AsmTokens->coatRoughness, material.clearcoatRoughness).c_str(),
+      printInput(AsmTokens->coatIOR, material.clearcoatIor).c_str(),
+      printInput(AsmTokens->coatSpecularLevel, material.clearcoatSpecular).c_str(),
+      printInput(AsmTokens->coatNormal, material.clearcoatNormal).c_str(),
+      printInput(AsmTokens->sheenColor, material.sheenColor).c_str(),
+      printInput(AsmTokens->sheenRoughness, material.sheenRoughness).c_str(),
+      printInput(AsmTokens->anisotropyLevel, material.anisotropyLevel).c_str(),
+      printInput(AsmTokens->anisotropyAngle, material.anisotropyAngle).c_str(),
+      printInput(AsmTokens->opacity, material.opacity).c_str(),
+      printInput(UsdPreviewSurfaceTokens->opacityThreshold, material.opacityThreshold).c_str(),
+      printInput(UsdPreviewSurfaceTokens->displacement, material.displacement).c_str(),
+      printInput(UsdPreviewSurfaceTokens->occlusion, material.occlusion).c_str(),
+      printInput(UsdPreviewSurfaceTokens->ior, material.ior).c_str(),
+      printInput(AsmTokens->translucency, material.transmission).c_str(),
+      printInput(AsmTokens->volumeThickness, material.volumeThickness).c_str(),
+      printInput(AsmTokens->absorptionDistance, material.absorptionDistance).c_str(),
+      printInput(AsmTokens->absorptionColor, material.absorptionColor).c_str(),
+      printInput(AsmTokens->scatteringDistance, material.scatteringDistance).c_str(),
+      printInput(AsmTokens->scatteringDistanceScale, material.scatteringDistanceScale).c_str(),
+      printInput(AsmTokens->scatteringColor, material.scatteringColor).c_str(),
       printClearcoatModelsTransmissionTint(material).c_str(),
       printUnlit(material).c_str());
 }
@@ -745,6 +730,14 @@ void
 UniqueNameEnforcer::enforceUniqueness(std::string& name)
 {
     _makeUniqueAndAdd(namesMap, name);
+}
+
+void
+removeBrackets(std::string& name)
+{
+    name.erase(std::remove_if(name.begin(), name.end(),
+                             [](char c) { return c == '[' || c == ']'; }),
+               name.end());
 }
 
 void

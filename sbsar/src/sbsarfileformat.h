@@ -23,9 +23,9 @@ struct SBSAROptions
 {
     PXR_NS::VtDictionary sbsarParameters;
     std::uint32_t depth = 0;
-    bool writeMaterialX = false;
-    bool writeASM = true;
     bool writeUsdPreviewSurface = true;
+    bool writeASM = true;
+    bool writeOpenPBR = false;
 };
 }
 
