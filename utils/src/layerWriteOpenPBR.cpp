@@ -9,7 +9,7 @@ the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTA
 OF ANY KIND, either express or implied. See the License for the specific language
 governing permissions and limitations under the License.
 */
-#include <fileformatutils/layerWriteMaterialX.h>
+#include <fileformatutils/layerWriteOpenPBR.h>
 
 #include <fileformatutils/common.h>
 #include <fileformatutils/debugCodes.h>
@@ -50,39 +50,35 @@ _createMaterialXUvTransform(SdfAbstractData* sdfData,
                             const Input& input,
                             const SdfPath& uvReaderResultPath)
 {
-    if (input.transformRotation.IsEmpty() && input.transformScale.IsEmpty() &&
-        input.transformTranslation.IsEmpty()) {
+    if (input.hasDefaultTransform()) {
         return uvReaderResultPath;
     }
 
     // For the place2d node, the scale is not a multiplier, but the overall scale and so we need to
     // invert the value
-    VtValue scale;
-    if (input.transformScale.IsHolding<GfVec2f>()) {
-        GfVec2f s = input.transformScale.UncheckedGet<GfVec2f>();
-        s[0] = s[0] != 0.0f ? 1.0f / s[0] : 0.0f;
-        s[1] = s[1] != 0.0f ? 1.0f / s[1] : 0.0f;
-        scale = s;
-    }
+    GfVec2f scale = input.uvScale;
+    scale[0] = scale[0] != 0.0f ? 1.0f / scale[0] : 0.0f;
+    scale[1] = scale[1] != 0.0f ? 1.0f / scale[1] : 0.0f;
 
     // Create UV transform by applying scale, rotation and transform, in that order
     // This matches what the UsdTransform2d node does
-    return createShader(sdfData,
-                        parentPath,
-                        TfToken(name + "_uv_transform"),
-                        MtlXTokens->ND_place2d_vector2,
-                        "out",
-                        { { "scale", scale },
-                          { "rotate", input.transformRotation },
-                          { "offset", input.transformTranslation } },
-                        { { "texcoord", uvReaderResultPath } });
+    return createShader(
+      sdfData,
+      parentPath,
+      TfToken(name + "_uv_transform"),
+      MtlXTokens->ND_place2d_vector2,
+      "out",
+      { { "scale", scale }, { "rotate", input.uvRotation }, { "offset", input.uvTranslation } },
+      { { "texcoord", uvReaderResultPath } });
     ;
 }
 
 std::string
 _toMaterialXAddressMode(const TfToken& wrapMode)
 {
-    if (wrapMode == AdobeTokens->repeat) {
+    if (wrapMode.IsEmpty()) {
+        return "periodic";
+    } else if (wrapMode == AdobeTokens->repeat) {
         return "periodic";
     } else if (wrapMode == AdobeTokens->clamp) {
         return "clamp";
@@ -250,14 +246,12 @@ _createMaterialXTextureReader(SdfAbstractData* sdfData,
         textureOutput = createShader(sdfData,
                                      parentPath,
                                      TfToken(name.GetString() + "_to_world_space"),
-                                     MtlXTokens->ND_normalmap_float,
+                                     MtlXTokens->ND_normalmap,
                                      "out",
                                      {},
                                      { { "in", textureOutput } });
     } else {
-        if (!input.scale.IsEmpty() || !input.bias.IsEmpty()) {
-            GfVec4f scale4 = input.scale.GetWithDefault<GfVec4f>(GfVec4f(1.0f));
-            GfVec4f bias4 = input.bias.GetWithDefault<GfVec4f>(GfVec4f(0.0f));
+        if (!input.hasDefaultScaleAndBias()) {
             bool isColor = shaderType == MtlXTokens->ND_image_color3;
             textureOutput = _createScaleAndBiasNodes(sdfData,
                                                      parentPath,
@@ -265,8 +259,8 @@ _createMaterialXTextureReader(SdfAbstractData* sdfData,
                                                      textureOutput,
                                                      numChannels,
                                                      isColor,
-                                                     scale4,
-                                                     bias4);
+                                                     input.scale,
+                                                     input.bias);
         }
     }
 
@@ -284,16 +278,16 @@ _createMaterialXTextureReader(SdfAbstractData* sdfData,
 }
 
 void
-_setupMaterialXInput(WriteSdfContext& ctx,
-                     const SdfPath& materialPath,
-                     const SdfPath& parentPath,
-                     const TfToken& name,
-                     const Input& input,
-                     std::unordered_map<int, SdfPath>& uvReaderResultPathMap,
-                     InputValues& inputValues,
-                     InputConnections& inputConnections,
-                     const InputToMaterialInputTypeMap& inputRemapping,
-                     MaterialInputs& materialInputs)
+_setupOpenPbrInput(WriteSdfContext& ctx,
+                   const SdfPath& materialPath,
+                   const SdfPath& parentPath,
+                   const TfToken& name,
+                   const Input& input,
+                   std::unordered_map<int, SdfPath>& uvReaderResultPathMap,
+                   InputValues& inputValues,
+                   InputConnections& inputConnections,
+                   const InputToMaterialInputTypeMap& inputRemapping,
+                   MaterialInputs& materialInputs)
 {
     auto remappingIt = inputRemapping.find(name);
     bool hasMapping = remappingIt != inputRemapping.cend();
@@ -341,7 +335,7 @@ _setupMaterialXInput(WriteSdfContext& ctx,
             bool isNormalMap =
               name == OpenPbrTokens->geometry_normal || name == OpenPbrTokens->geometry_coat_normal;
             // geometry_opacity expects a color, but our input opacity is a float input
-            // bool convertToColor = name == OpenPbrTokens->geometry_opacity;
+            bool convertToColor = name == OpenPbrTokens->geometry_opacity;
             SdfPath texResultPath = _createMaterialXTextureReader(ctx.sdfData,
                                                                   parentPath,
                                                                   name,
@@ -349,46 +343,39 @@ _setupMaterialXInput(WriteSdfContext& ctx,
                                                                   stResultPath,
                                                                   textureConnection,
                                                                   isNormalMap,
-                                                                  false);
+                                                                  convertToColor);
 
             inputConnections.emplace_back(name.GetString(), texResultPath);
         }
     } else if (!input.value.IsEmpty()) {
-        // Set constant value on the surface shader directly
-        if (name == OpenPbrTokens->geometry_opacity) {
-            // geometry_opacity expects a color, but our input opacity is a float input
-            if (input.value.IsHolding<float>()) {
-                // NOTE that here, we are not creating a connection to a material level opacity
-                // input variable do to the type difference.
-                float opacity = input.value.UncheckedGet<float>();
-                inputValues.emplace_back(name.GetString(), VtValue(opacity));
-            } else {
-                TF_WARN("Expect float value for constant opacity. Got type %s",
-                        input.value.GetTypeName().c_str());
-            }
-        } else {
+        if (!materialInputName.IsEmpty()) {
+            // Set constant value on material input and connect surface shader to that input
             SdfPath connection = addMaterialInputValue(
               ctx.sdfData, materialPath, materialInputName, inputType, input.value, materialInputs);
             inputConnections.emplace_back(name.GetString(), connection);
             const MinMaxVtValuePair* range =
               ShaderRegistry::getInstance().getMaterialInputRange(materialInputName);
-            if (range)
+            if (range) {
                 setRangeMetadata(ctx.sdfData, connection, *range);
+            }
+        } else {
+            // If the input name is not valid, then just set the value
+            inputValues.emplace_back(name.GetString(), input.value);
         }
     }
 }
 
 void
-writeMaterialX(WriteSdfContext& ctx,
-               const SdfPath& materialPath,
-               const Material& material,
-               MaterialInputs& materialInputs)
+writeOpenPBR(WriteSdfContext& ctx,
+             const SdfPath& materialPath,
+             const OpenPbrMaterial& material,
+             MaterialInputs& materialInputs)
 {
     SdfPath p;
 
     // This will create a NodeGraph parent prim for all the shading nodes in this network
     SdfPath parentPath =
-      createPrimSpec(ctx.sdfData, materialPath, MtlXTokens->MaterialX, UsdShadeTokens->NodeGraph);
+      createPrimSpec(ctx.sdfData, materialPath, MtlXTokens->OpenPBR, UsdShadeTokens->NodeGraph);
 
     TF_DEBUG_MSG(FILE_FORMAT_UTIL, "layer::write MaterialX network %s\n", parentPath.GetText());
 
@@ -396,115 +383,76 @@ writeMaterialX(WriteSdfContext& ctx,
     InputConnections inputConnections;
     std::unordered_map<int, SdfPath> uvReaderResultPathMap;
     const InputToMaterialInputTypeMap& remapping =
-      ShaderRegistry::getInstance().getMaterialXInputRemapping();
+      ShaderRegistry::getInstance().getOpenPbrInputRemapping();
     auto writeInput = [&](const TfToken& name, const Input& input) {
         if (!input.isEmpty())
-            _setupMaterialXInput(ctx,
-                                 materialPath,
-                                 parentPath,
-                                 name,
-                                 input,
-                                 uvReaderResultPathMap,
-                                 inputValues,
-                                 inputConnections,
-                                 remapping,
-                                 materialInputs);
+            _setupOpenPbrInput(ctx,
+                               materialPath,
+                               parentPath,
+                               name,
+                               input,
+                               uvReaderResultPathMap,
+                               inputValues,
+                               inputConnections,
+                               remapping,
+                               materialInputs);
     };
 
-    // OpenPBR spec:
-    // https://github.com/AcademySoftwareFoundation/OpenPBR/blob/main/reference/open_pbr_surface.mtlx
-
-    // Currently unused inputs
-    // Input useSpecularWorkflow;
-    // Input clearcoatSpecular;
-    // Input displacement;
-    // Input opacityThreshold;
-    // Input occlusion;
-    // Input volumeThickness;
-
-    // base
-    // base_weight (no source info)
-    writeInput(OpenPbrTokens->base_color, material.diffuseColor);
-    // XXX we're not setting base_roughness? Should we when metallic != 0?
-    // "Roughness of the diffuse reflection. Higher values cause the surface to appear flatter."
-    // writeInput(OpenPbrTokens->base_roughness, material.roughness);
-    writeInput(OpenPbrTokens->base_metalness, material.metallic);
-
-    // specular
-    writeInput(OpenPbrTokens->specular_weight, material.specularLevel);
-    writeInput(OpenPbrTokens->specular_color, material.specularColor);
-    writeInput(OpenPbrTokens->specular_roughness, material.roughness);
-    writeInput(OpenPbrTokens->specular_ior, material.ior);
-    // specular_ior_level (no source info)
-    writeInput(OpenPbrTokens->specular_anisotropy, material.anisotropyLevel);
-    // XXX it's unclear if the angle we got for the ASM model works with the OpenPBR rotation
-    writeInput(OpenPbrTokens->specular_rotation, material.anisotropyAngle);
-
-    // transmission
-    writeInput(OpenPbrTokens->transmission_weight, material.transmission);
-    writeInput(OpenPbrTokens->transmission_color, material.absorptionColor);
-    writeInput(OpenPbrTokens->transmission_depth, material.absorptionDistance);
-    // transmission_scatter (no source info)
-    // transmission_scatter_anisotropy (no source info)
-    // transmission_dispersion (no source info)
-
-    // subsurface
-    if (!material.scatteringColor.isEmpty() || !material.scatteringDistance.isEmpty()) {
-        // XXX We currently turn the subsurface fully on if the asset has a scattering color or
-        // distance specified
-        inputValues.emplace_back("subsurface_weight", 1.0f);
-    }
-    writeInput(OpenPbrTokens->subsurface_color, material.scatteringColor);
-    writeInput(OpenPbrTokens->subsurface_radius, material.scatteringDistance);
-    // subsurface_radius_scale (no source info) (maps to ASM scatteringDistanceScale)
-    // subsurface_anisotropy (no source info)
-
-    // fuzz
-    if (!material.sheenColor.isEmpty()) {
-        // XXX We currently turn the fuzz fully on if the asset has a sheen color specified
-        inputValues.emplace_back("fuzz_weight", 1.0f);
-    }
-    writeInput(OpenPbrTokens->fuzz_color, material.sheenColor);
-    writeInput(OpenPbrTokens->fuzz_roughness, material.sheenRoughness);
-
-    // coat
-    // XXX How does clearcoatSpecular fit into this lobe? coat_ior_level?
-    writeInput(OpenPbrTokens->coat_weight, material.clearcoat);
-    writeInput(OpenPbrTokens->coat_color, material.clearcoatColor);
-    writeInput(OpenPbrTokens->coat_roughness, material.clearcoatRoughness);
-    // coat_anisotropy (no source info)
-    // coat_rotation (no source info)
-    writeInput(OpenPbrTokens->coat_ior, material.clearcoatIor);
-    // coat_ior_level (no source info)
-
-    // thin_film
-    // thin_film_thickness (no source info)
-    // thin_film_ior (no source info)
-
-    // emission
-    if (!material.emissiveColor.isEmpty()) {
-        // The luminance is currently part of of the `scale` or `value` of the
-        // emissiveColor input
-        inputValues.emplace_back("emission_luminance", 1.0f);
-    }
-    writeInput(OpenPbrTokens->emission_color, material.emissiveColor);
-
-    // geometry
-    writeInput(OpenPbrTokens->geometry_opacity, material.opacity);
-    // geometry_thin_walled (no source info)
-    writeInput(OpenPbrTokens->geometry_normal, material.normal);
-    writeInput(OpenPbrTokens->geometry_coat_normal, material.clearcoatNormal);
-    // geometry_tangent (no source info)
+#define INPUT(x) writeInput(OpenPbrTokens->x, material.x);
+    INPUT(base_weight);
+    INPUT(base_color);
+    INPUT(base_diffuse_roughness);
+    INPUT(base_metalness);
+    INPUT(specular_weight);
+    INPUT(specular_color);
+    INPUT(specular_roughness);
+    INPUT(specular_ior);
+    INPUT(specular_roughness_anisotropy);
+    INPUT(transmission_weight);
+    INPUT(transmission_color);
+    INPUT(transmission_depth);
+    INPUT(transmission_scatter);
+    INPUT(transmission_scatter_anisotropy);
+    INPUT(transmission_dispersion_scale);
+    INPUT(transmission_dispersion_abbe_number);
+    INPUT(subsurface_weight);
+    INPUT(subsurface_color);
+    INPUT(subsurface_radius);
+    INPUT(subsurface_radius_scale);
+    INPUT(subsurface_scatter_anisotropy);
+    INPUT(fuzz_weight);
+    INPUT(fuzz_color);
+    INPUT(fuzz_roughness);
+    INPUT(coat_weight);
+    INPUT(coat_color);
+    INPUT(coat_roughness);
+    INPUT(coat_roughness_anisotropy);
+    INPUT(coat_ior);
+    INPUT(coat_darkening);
+    INPUT(thin_film_weight);
+    INPUT(thin_film_thickness);
+    INPUT(thin_film_ior);
+    INPUT(emission_luminance);
+    INPUT(emission_color);
+    INPUT(geometry_opacity);
+    INPUT(geometry_thin_walled);
+    INPUT(geometry_normal);
+    INPUT(geometry_coat_normal);
+    INPUT(geometry_tangent);
+    INPUT(geometry_coat_tangent);
+#undef INPUT
 
     // Create OpenPBR surface shader
     SdfPath outputPath = createShader(ctx.sdfData,
                                       parentPath,
-                                      MtlXTokens->MaterialX,
+                                      MtlXTokens->OpenPBR,
                                       MtlXTokens->ND_open_pbr_surface_surfaceshader,
                                       "out",
                                       inputValues,
                                       inputConnections);
     createShaderOutput(
       ctx.sdfData, materialPath, "mtlx:surface", SdfValueTypeNames->Token, outputPath);
+
+    // TODO: create displacement setup
 }
 }

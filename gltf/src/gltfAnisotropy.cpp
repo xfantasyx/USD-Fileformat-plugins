@@ -291,12 +291,15 @@ importAnisotropyData(ImportGltfContext& ctx,
                      AnisotropyData& anisotropy,
                      Image& anisotropySrcImage)
 {
+    TF_DEBUG_MSG(FILE_FORMAT_GLTF, "importAnisotropyData for material '%s'\n", m.name.c_str());
     bool ret = false;
     bool haveStrength = readDoubleValue(anisoExt.Get("anisotropyStrength"), anisotropy.strength);
     bool haveRotation = readDoubleValue(anisoExt.Get("anisotropyRotation"), anisotropy.rotation);
     readTextureInfo(anisoExt.Get("anisotropyTexture"), anisotropy.texture);
+    TF_DEBUG_MSG(FILE_FORMAT_GLTF, "  texture.index: %d\n", anisotropy.texture.index);
     Input anisotropyInput;
     if (anisotropy.texture.index > -1) {
+        TF_DEBUG_MSG(FILE_FORMAT_GLTF, "  calling importImage with index %d\n", anisotropy.texture.index);
         int imageIndex = importImage(ctx, anisotropy.texture.index, m.name, "anisotropy");
         importTexture(ctx.gltf,
                       imageIndex,
@@ -339,10 +342,16 @@ importAnisotropyTexture(ImportGltfContext& ctx,
                         const Image& anisotropySrcImage,
                         std::unordered_map<std::string, int>& cache)
 {
+    TF_DEBUG_MSG(FILE_FORMAT_GLTF, "importAnisotropyTexture for material '%s'\n", m.displayName.c_str());
     // Get Roughness image
     const tinygltf::Image* roughnessImage = nullptr;
-    if (gm.pbrMetallicRoughness.metallicRoughnessTexture.index < ctx.gltf->textures.size()) {
-        roughnessImage = getImage(ctx.gltf, gm.pbrMetallicRoughness.metallicRoughnessTexture.index);
+    // Validate texture index before use to prevent signed/unsigned comparison bug
+    int roughnessTexIdx = gm.pbrMetallicRoughness.metallicRoughnessTexture.index;
+    TF_DEBUG_MSG(FILE_FORMAT_GLTF, "  roughness texture index: %d\n", roughnessTexIdx);
+    if (roughnessTexIdx >= 0 && static_cast<size_t>(roughnessTexIdx) < ctx.gltf->textures.size()) {
+        TF_DEBUG_MSG(FILE_FORMAT_GLTF, "  calling getImage for roughness\n");
+        roughnessImage = getImage(ctx.gltf, roughnessTexIdx);
+        TF_DEBUG_MSG(FILE_FORMAT_GLTF, "  getImage returned: %p\n", roughnessImage);
     }
 
     // Check if the anisotropy textures are already in the cache

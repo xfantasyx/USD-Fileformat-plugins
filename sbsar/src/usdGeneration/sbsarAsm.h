@@ -17,6 +17,15 @@ governing permissions and limitations under the License.
 
 namespace adobe::usd::sbsar {
 
+/// @brief Adds an ASM (Adobe Standard Material) material network to the material
+///
+/// The network is created from the provided Substance graph description and connected to the
+/// material as the 'adobe' surface.
+///
+/// @param sdfData      SDF data container to store the material in
+/// @param materialPath Path of the parent material
+/// @param graphDesc    Description of the current SBSAR graph
+/// @return true if the material was successfully added, false otherwise
 bool
 addAsmShader(PXR_NS::SdfAbstractData* sdfData,
              const PXR_NS::SdfPath& materialPath,

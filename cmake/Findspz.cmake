@@ -40,35 +40,16 @@ endif()
 
 if(USD_FILEFORMATS_FORCE_FETCHCONTENT OR USD_FILEFORMATS_FETCH_SPZ)
     message(STATUS "Fetching spz")
-    include(FetchContent)
-    FetchContent_Declare(
-        spz
-        GIT_REPOSITORY "https://github.com/raymondyfei/spz.git"
-        GIT_TAG        "fd4e2a57bd6b7462657d41eebda330eca0f35159"
-        OVERRIDE_FIND_PACKAGE
+    include(CPM)
+    CPMAddPackage(
+        NAME spz
+        GIT_REPOSITORY "https://github.com/nianticlabs/spz.git"
+        GIT_TAG        "v1.1.0+adobe.4"
+        OPTIONS        "BUILD_SHARED_LIBS OFF"
     )
-    FetchContent_MakeAvailable(spz)
-    if (spz_POPULATED)
-        set(spz_FOUND TRUE)
-        file(GLOB SPZ_SRC_FILES
-            ${spz_SOURCE_DIR}/src/cc/*.cc
-            ${spz_SOURCE_DIR}/src/cc/*.h
-        )
-        add_library(spz STATIC)
-        target_sources(spz PRIVATE ${SPZ_SRC_FILES})
-        set(SPZ_INCLUDE_DIR "${spz_SOURCE_DIR}/src/cc")
-        target_include_directories(spz PUBLIC ${SPZ_INCLUDE_DIR})
-        target_link_libraries(spz PRIVATE ZLIB::ZLIB)
-        set_property(TARGET spz PROPERTY POSITION_INDEPENDENT_CODE ON)
-        set_property(TARGET spz PROPERTY CXX_STANDARD 17)
-        target_compile_definitions(spz PRIVATE "_USE_MATH_DEFINES")
-        if (NOT MSVC)
-            target_compile_options(spz PRIVATE "-Wno-shorten-64-to-32")
-        endif()
-
-        add_library(spz::spz ALIAS spz)
-    elseif(${spz_FIND_REQUIRED})
-        message(FATAL_ERROR "Could not fetch spz")
+    set(spz_FOUND TRUE)
+    if (NOT MSVC)
+        target_compile_options(spz PRIVATE "-Wno-shorten-64-to-32")
     endif()
 else()
     include(FindPackageHandleStandardArgs)

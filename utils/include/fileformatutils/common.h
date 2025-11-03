@@ -61,7 +61,6 @@ governing permissions and limitations under the License.
     (rotation) \
     (translation) \
     (normals) \
-    (normalScale) \
     (tangents) \
     (varname) \
     (UsdUVTexture) \
@@ -71,62 +70,13 @@ governing permissions and limitations under the License.
     (stPrimvarName) \
     (surface) \
     (UsdPreviewSurface) \
-    (useSpecularWorkflow) \
-    (diffuseColor) \
-    (emissiveColor) \
-    (specularColor) \
-    (normal) \
-    (metallic) \
-    (roughness) \
-    (clearcoat) \
-    (clearcoatColor) \
-    (clearcoatIor) \
-    (clearcoatNormal) \
-    (clearcoatRoughness) \
-    (clearcoatSpecular) \
-    (sheenOpacity) \
-    (sheenColor) \
-    (sheenRoughness) \
-    (anisotropyLevel) \
     (anisotropyLevelTexture) \
-    (anisotropyAngle) \
     (anisotropyAngleTexture) \
-    (opacity) \
-    (opacityThreshold) \
-    (displacement) \
-    (occlusion) \
-    (ior) \
     (ASM) \
     ((adobeStandardMaterial, "AdobeStandardMaterial_4_0")) \
-    (baseColor) \
-    (specularEdgeColor) \
-    (specularLevel) \
-    (height) \
-    (heightLevel) \
-    (heightScale) \
-    (emissiveIntensity) \
-    (emissive) \
-    (translucency) \
-    (IOR) \
-    (dispersion) \
-    (absorptionColor) \
-    (absorptionDistance) \
-    (scatter) \
-    (scatteringColor) \
-    (scatteringDistance) \
-    (coatOpacity) \
-    (coatColor) \
-    (coatRoughness) \
-    (coatIOR) \
-    (coatSpecularLevel) \
-    (coatNormal) \
-    (ambientOcclusion) \
-    (volumeThickness) \
     (clearcoatModelsTransmissionTint) \
     (unlit) \
-    (writeMaterialX) \
     (transmission) \
-    (subsurfaceWeight) \
     (min) \
     (max) \
     (originalColorSpace)
@@ -135,7 +85,7 @@ governing permissions and limitations under the License.
 /// Tokens for MaterialX nodes
 // clang-format off
 #define MATERIAL_X_TOKENS \
-    (MaterialX) \
+    (OpenPBR) \
     (srgb_texture) \
     (ND_image_vector4) \
     (ND_image_color3) \
@@ -154,46 +104,115 @@ governing permissions and limitations under the License.
     (ND_place2d_vector2) \
     (ND_separate4_vector4) \
     (ND_convert_float_color3) \
-    (ND_normalmap_float) \
-    (ND_adobe_standard_material) \
+    (ND_normalmap) \
     (ND_open_pbr_surface_surfaceshader)
 // clang-format on
 
+/// Tokens for the inputs of the UsdPreviewSurface shader
+/// The order of tokens listed below is based on the order defined in
+/// https://github.com/PixarAnimationStudios/OpenUSD/blob/b9282cb274d111878707baff97d4223a81ef23d8/pxr/usd/plugin/usdShaders/shaders/shaderDefs.usda
+// clang-format off
+#define USD_PREVIEW_SURFACE_TOKENS \
+    (diffuseColor) \
+    (emissiveColor) \
+    (useSpecularWorkflow) \
+    (specularColor) \
+    (metallic) \
+    (roughness) \
+    (clearcoat) \
+    (clearcoatRoughness) \
+    (opacity) \
+    (opacityMode) \
+    (opacityThreshold) \
+    (ior) \
+    (normal) \
+    (displacement) \
+    (occlusion)
+// clang-format on
+
+/// Tokens for the inputs of the AdobeStandardMaterial 4.0 shader
+/// The order of tokens listed below is based on the order defined in the ASM spec found at
+/// https://helpx.adobe.com/substance-3d-general/adobe-standard-material.html
+// clang-format off
+#define ASM_TOKENS \
+    (baseColor) \
+    (roughness) \
+    (metallic) \
+    (opacity) \
+    (specularLevel) \
+    (specularEdgeColor) \
+    (normal) \
+    (normalScale) \
+    (combineNormalAndHeight) \
+    (height) \
+    (heightScale) \
+    (heightLevel) \
+    (anisotropyLevel) \
+    (anisotropyAngle) \
+    (emissiveIntensity) \
+    (emissive) \
+    (sheenOpacity) \
+    (sheenColor) \
+    (sheenRoughness) \
+    (translucency) \
+    (IOR) \
+    (dispersion) \
+    (absorptionColor) \
+    (absorptionDistance) \
+    (scatter) \
+    (scatteringColor) \
+    (scatteringDistance) \
+    (scatteringDistanceScale) \
+    (scatteringRedShift) \
+    (scatteringRayleigh) \
+    (coatOpacity) \
+    (coatColor) \
+    (coatRoughness) \
+    (coatIOR) \
+    (coatSpecularLevel) \
+    (coatNormal) \
+    (coatNormalScale) \
+    (ambientOcclusion) \
+    (volumeThickness) \
+    (volumeThicknessScale)
+// clang-format on
+
 /// Tokens for the inputs of the OpenPBR surface shader
+/// The order of tokens listed below is based on the order defined in
+/// https://github.com/AcademySoftwareFoundation/OpenPBR/blob/main/reference/open_pbr_surface.mtlx
 // clang-format off
 #define OPEN_PBR_TOKENS \
     (base_weight) \
     (base_color) \
-    (base_roughness) \
+    (base_diffuse_roughness) \
     (base_metalness) \
     (specular_weight) \
     (specular_color) \
     (specular_roughness) \
     (specular_ior) \
-    (specular_ior_level) \
-    (specular_anisotropy) \
-    (specular_rotation) \
+    (specular_roughness_anisotropy) \
     (transmission_weight) \
     (transmission_color) \
     (transmission_depth) \
     (transmission_scatter) \
     (transmission_scatter_anisotropy) \
-    (transmission_dispersion) \
+    (transmission_dispersion_scale) \
+    (transmission_dispersion_abbe_number) \
     (subsurface_weight) \
     (subsurface_color) \
     (subsurface_radius) \
     (subsurface_radius_scale) \
-    (subsurface_anisotropy) \
+    (subsurface_scatter_anisotropy) \
     (fuzz_weight) \
     (fuzz_color) \
     (fuzz_roughness) \
     (coat_weight) \
     (coat_color) \
     (coat_roughness) \
-    (coat_anisotropy) \
-    (coat_rotation) \
+    (coat_roughness_anisotropy) \
     (coat_ior) \
-    (coat_ior_level) \
+    (coat_darkening) \
+    (thin_film_weight) \
     (thin_film_thickness) \
     (thin_film_ior) \
     (emission_luminance) \
@@ -202,7 +221,33 @@ governing permissions and limitations under the License.
     (geometry_thin_walled) \
     (geometry_normal) \
     (geometry_coat_normal) \
-    (geometry_tangent)
+    (geometry_tangent) \
+    (geometry_coat_tangent)
+// clang-format on
+
+/// Tokens for the naming of OpenPBR inputs on the material that don't have ASM equivalents
+// clang-format off
+#define OPEN_PBR_MATERIAL_INPUT_TOKENS \
+    (baseDiffuseRoughness) \
+    (baseWeight) \
+    (coatDarkening) \
+    (coatRoughnessAnisotropy) \
+    (coatTangent) \
+    (emissionLuminance) \
+    (fuzzWeight) \
+    (specularWeight) \
+    (subsurfaceRadiusScale) \
+    (subsurfaceScatterAnisotropy) \
+    (subsurfaceWeight) \
+    (tangent) \
+    (thinFilmIOR) \
+    (thinFilmThickness) \
+    (thinFilmWeight) \
+    (thinWalled) \
+    (transmissionDispersionAbbeNumber) \
+    (transmissionDispersionScale) \
+    (transmissionScatter) \
+    (transmissionScatterAnisotropy)
 // clang-format on
 
 /// Tokens for the inputs of the neural graphics primitives (NGPs)
@@ -244,61 +289,19 @@ governing permissions and limitations under the License.
     (widths1) \
     (widths2)
 
-#define ADOBE_GSPLAT_SH_TOKENS \
-    (fRest0) \
-    (fRest1) \
-    (fRest2) \
-    (fRest3) \
-    (fRest4) \
-    (fRest5) \
-    (fRest6) \
-    (fRest7) \
-    (fRest8) \
-    (fRest9) \
-    (fRest10) \
-    (fRest11) \
-    (fRest12) \
-    (fRest13) \
-    (fRest14) \
-    (fRest15) \
-    (fRest16) \
-    (fRest17) \
-    (fRest18) \
-    (fRest19) \
-    (fRest20) \
-    (fRest21) \
-    (fRest22) \
-    (fRest23) \
-    (fRest24) \
-    (fRest25) \
-    (fRest26) \
-    (fRest27) \
-    (fRest28) \
-    (fRest29) \
-    (fRest30) \
-    (fRest31) \
-    (fRest32) \
-    (fRest33) \
-    (fRest34) \
-    (fRest35) \
-    (fRest36) \
-    (fRest37) \
-    (fRest38) \
-    (fRest39) \
-    (fRest40) \
-    (fRest41) \
-    (fRest42) \
-    (fRest43) \
-    (fRest44)
 // clang-format on
 
 PXR_NAMESPACE_OPEN_SCOPE
 TF_DECLARE_PUBLIC_TOKENS(AdobeTokens, USDFFUTILS_API, ADOBE_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(MtlXTokens, USDFFUTILS_API, MATERIAL_X_TOKENS);
+TF_DECLARE_PUBLIC_TOKENS(UsdPreviewSurfaceTokens, USDFFUTILS_API, USD_PREVIEW_SURFACE_TOKENS);
+TF_DECLARE_PUBLIC_TOKENS(AsmTokens, USDFFUTILS_API, ASM_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(OpenPbrTokens, USDFFUTILS_API, OPEN_PBR_TOKENS);
+TF_DECLARE_PUBLIC_TOKENS(OpenPbrMaterialInputTokens,
+                         USDFFUTILS_API,
+                         OPEN_PBR_MATERIAL_INPUT_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(AdobeNgpTokens, USDFFUTILS_API, ADOBE_NGP_TOKENS);
 TF_DECLARE_PUBLIC_TOKENS(AdobeGsplatBaseTokens, USDFFUTILS_API, ADOBE_GSPLAT_BASE_TOKENS);
-TF_DECLARE_PUBLIC_TOKENS(AdobeGsplatSHTokens, USDFFUTILS_API, ADOBE_GSPLAT_SH_TOKENS);
 PXR_NAMESPACE_CLOSE_SCOPE
 
 #define VOID_GUARD(x, ...)                                                                         \
@@ -375,6 +378,12 @@ argReadFloatArray(const PXR_NS::SdfFileFormat::FileFormatArguments& args,
                   const std::string& arg,
                   PXR_NS::VtFloatArray& target,
                   const std::string& debugTag);
+
+/// Issues a warning if the specified arg is present that it has been deprecated
+void USDFFUTILS_API
+argWarnDeprecatedArg(const PXR_NS::SdfFileFormat::FileFormatArguments& args,
+                     const std::string& arg,
+                     const std::string& debugTag);
 
 std::string USDFFUTILS_API
 getFileExtension(const std::string& filePath, const std::string& defaultValue);

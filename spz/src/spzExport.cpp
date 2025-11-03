@@ -240,6 +240,7 @@ exportSpz(const UsdData& usd, spz::GaussianCloud& gaussianCloud)
 
     gaussianCloud.sh.resize(numGsplatsSHCoeffs * totalMesh.points.size());
     // SPZ stores SH coefficients in row-major order, different than USD's column-major order.
+    // Also, SPZ stores SH coefficients in an Array-of-Structs (AoS) format.
     for (size_t shRowIndex = 0; shRowIndex < numNonZeroSHBands; ++shRowIndex) {
         for (size_t shColIndex = 0; shColIndex < 3; ++shColIndex) {
             const std::size_t spzSHIndex = shRowIndex * 3 + shColIndex;
@@ -247,7 +248,8 @@ exportSpz(const UsdData& usd, spz::GaussianCloud& gaussianCloud)
             const std::size_t spzShCoeffOffset = spzSHIndex * totalMesh.points.size();
 
             for (size_t i = 0; i < totalMesh.points.size(); ++i) {
-                gaussianCloud.sh[spzShCoeffOffset + i] = totalMesh.shCoeffs[usdSHIndex][i];
+                gaussianCloud.sh[i * numGsplatsSHCoeffs + spzSHIndex] =
+                  totalMesh.shCoeffs[usdSHIndex][i];
             }
         }
     }

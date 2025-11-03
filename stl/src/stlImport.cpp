@@ -75,13 +75,22 @@ importStl(UsdData& usd, const StlModel& stl)
         mesh.points[3 * i] = GfVec3f(v0.x, v0.y, v0.z);
         mesh.points[3 * i + 1] = GfVec3f(v1.x, v1.y, v1.z);
         mesh.points[3 * i + 2] = GfVec3f(v2.x, v2.y, v2.z);
-        GfVec3f usdNormal = GfVec3f(facet.normal.x, facet.normal.y, facet.normal.z);
-        usdNormal.Normalize();
 
-        // Handle degenerate normals
-        if (usdNormal.GetLengthSq() < 1e-3f) {
-            usdNormal = GfVec3f(0.0f, 1.0f, 0.0f); // Synthesize a valid normal
+        /*
+        // TODO: preserve original normals on import, once the same is done on export
+
+        StlNormal normal = facet.normal;
+
+        // Handle degenerate or missing normals
+        if (normal.lengthSq() < 1e-6f) {
+            normal = calculateNormalOfFacet(facet);
         }
+        */
+
+        StlNormal normal = calculateNormalOfFacet(facet);
+
+        GfVec3f usdNormal = GfVec3f(normal.x, normal.y, normal.z);
+        usdNormal.Normalize();
 
         mesh.normals.values[i] = usdNormal;
     }

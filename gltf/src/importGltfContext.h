@@ -25,9 +25,9 @@ struct ImportGltfContext
     const tinygltf::Model* gltf = nullptr;
     UsdData* usd = nullptr;
     std::string path;
-    std::vector<int> nodeMap;
-    std::vector<int> parentMap;
-    std::vector<std::string> skeletonNodeNames;
+    std::unordered_map<int, int> nodeMap;  // maps glTF node index to USD node index
+    std::unordered_map<int, int> parentMap; // maps glTF node index to parent glTF node index
+    std::unordered_map<int, std::string> skeletonNodeNames;  // maps glTF node index to skeleton node name
     std::vector<std::vector<int>> meshes;
     std::vector<int> meshUseCount;
 

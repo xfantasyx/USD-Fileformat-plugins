@@ -118,14 +118,54 @@ expandIndexedValues(const PXR_NS::VtIntArray& indices, PXR_NS::VtArray<T>& value
         values.assign(indices.size(), values.front());
     } else {
         PXR_NS::VtArray<T> temp = std::move(values);
-        unsigned int size = indices.size();
+        const size_t size = indices.size();
+        const int tempSize = temp.size();
         values.resize(size);
-        for (unsigned int i = 0; i < size; i++) {
+        for (size_t i = 0; i < size; i++) {
             int index = indices[i];
-            if (index < 0 && index >= temp.size()) {
+            if (index < 0 || index >= tempSize) {
                 // set invalid indices to 0
                 index = 0;
             }
+            values[i] = temp[index];
+        }
+    }
+}
+
+/// \ingroup utils_geometry
+/// \brief Remove the indexing out of a set of values using the vertexIndices to find an
+// index into the valuesIndices array which is then used to index the values array.
+template<typename T>
+void
+expandIndexedValuesIndirect(const PXR_NS::VtIntArray& vertexIndices,
+                            const PXR_NS::VtIntArray& valuesIndices,
+                            PXR_NS::VtArray<T>& values)
+{
+    if (values.empty()) {
+        return;
+    } else if (values.size() == 1) {
+        values.assign(vertexIndices.size(), values.front());
+    } else {
+        PXR_NS::VtArray<T> temp = std::move(values);
+        const size_t indicesSize = vertexIndices.size();
+        // Use int instead of size_t for these size variables because we will
+        // be comparing against an int value obtained from an indices array.
+        const int valuesIndicesSize = valuesIndices.size();
+        const int valuesSize = temp.size();
+        values.resize(indicesSize);
+        for (size_t i = 0; i < indicesSize; i++) {
+            int index = vertexIndices[i];
+            if (index >= 0 && index < valuesIndicesSize) {
+                index = valuesIndices[index];
+                if (index < 0 && index >= valuesSize) {
+                    // set invalid indices to 0
+                    index = 0;
+                }
+            } else {
+                // set invalid indices to 0
+                index = 0;
+            }
+
             values[i] = temp[index];
         }
     }

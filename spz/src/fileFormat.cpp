@@ -56,10 +56,16 @@ UsdSpzFileFormat::InitData(const FileFormatArguments& args) const
         TF_DEBUG_MSG(
           FILE_FORMAT_SPZ, "FileFormatArg: %s = %s\n", arg.first.c_str(), arg.second.c_str());
     }
+    // Note, currently the SPZ format plugin does not support any of the default file format args,
+    // but we want to have this general infrastructure in place to parse and forward generic
+    // arguments.
+    pd->parseFromFileFormatArgs(args, DEBUG_TAG);
     argReadBool(
       args, UsdSpzFileFormatTokens->gsplatsWithZup.GetText(), pd->gsplatsWithZup, DEBUG_TAG);
-    argReadFloatArray(
-	  args, UsdSpzFileFormatTokens->gsplatsClippingBox.GetText(), pd->gsplatsClippingBox, DEBUG_TAG);
+    argReadFloatArray(args,
+                      UsdSpzFileFormatTokens->gsplatsClippingBox.GetText(),
+                      pd->gsplatsClippingBox,
+                      DEBUG_TAG);
     return pd;
 }
 
@@ -101,14 +107,16 @@ UsdSpzFileFormat::Read(SdfLayer* layer, const std::string& resolvedPath, bool me
     SpzDataConstPtr data = TfDynamic_cast<const SpzDataConstPtr>(layerData);
     UsdData usd;
     try {
-        WriteLayerOptions layerOptions;
-        ImportSpzOptions options;
-        options.importGsplatWithZup = data->gsplatsWithZup;
-        options.importGsplatClippingBox = data->gsplatsClippingBox;
-        GaussianCloud gaussianCloud = loadSpz(resolvedPath);
-        GUARD(importSpz(options, gaussianCloud, usd), "Error translating SPZ to USD\n");
+        WriteLayerOptions layerOptions(*data);
+        ImportSpzOptions importSpzOptions;
+        importSpzOptions.importGsplatWithZup = data->gsplatsWithZup;
+        importSpzOptions.importGsplatClippingBox = data->gsplatsClippingBox;
+        spz::UnpackOptions unpackOptions;
+        GaussianCloud gaussianCloud = loadSpz(resolvedPath, unpackOptions);
+        GUARD(importSpz(importSpzOptions, gaussianCloud, usd), "Error translating SPZ to USD\n");
         GUARD(
-          writeLayer(layerOptions, usd, layer, layerData, fileType, DEBUG_TAG, SdfFileFormat::_SetLayerData),
+          writeLayer(
+            layerOptions, usd, layer, layerData, fileType, DEBUG_TAG, SdfFileFormat::_SetLayerData),
           "Error writing to the USD layer\n");
     } catch (std::exception& e) {
         TF_DEBUG_MSG(FILE_FORMAT_SPZ, "Failed to open %s: %s\n", resolvedPath.c_str(), e.what());
@@ -145,7 +153,8 @@ UsdSpzFileFormat::WriteToFile(const SdfLayer& layer,
     try {
         const std::string parentPath = TfGetPathName(filename);
         TfMakeDirs(parentPath, -1, true);
-        saveSpz(gaussianCloud, filename);
+        spz::PackOptions packOptions;
+        saveSpz(gaussianCloud, packOptions, filename);
     } catch (std::exception& e) {
         TF_DEBUG_MSG(FILE_FORMAT_SPZ, "Error writing SPZ to %s: %s\n", filename.c_str(), e.what());
     }

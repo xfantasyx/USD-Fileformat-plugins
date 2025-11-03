@@ -27,6 +27,20 @@ using namespace SubstanceAir;
 
 namespace adobe::usd::sbsar {
 
+// Helper function to determine which usage string to use for light textures
+std::string
+getDomeLightUsage(const SubstanceAir::GraphDesc& graphDesc)
+{
+    if (hasUsage("environment", graphDesc)) {
+        return "environment";
+    }
+    if (hasUsage("panorama", graphDesc)) {
+        return "panorama";
+    }
+    // fallback to environment
+    return "environment";
+}
+
 SdfPath
 addLuxDomeLight(SdfAbstractData* sdfData,
                 const MappedSymbol& graphName,
@@ -86,8 +100,9 @@ addLuxDomeLight(SdfAbstractData* sdfData,
         SdfPath texAttrPath =
           createShaderInput(sdfData, lightPath, "texture:file", SdfValueTypeNames->Asset);
         JsValue params = convertSbsarParameters(sbsarData.sbsarParameters);
+        std::string usageString = getDomeLightUsage(graphDesc);
         SdfAssetPath path =
-          SdfAssetPath(generateSbsarInfoPath("environment", graphName, sbsarHash, params));
+          SdfAssetPath(generateSbsarInfoPath(usageString, graphName, sbsarHash, params));
         setAttributeMetadata(sdfData, texAttrPath, SdfFieldKeys->Hidden, VtValue(true));
         setAttributeDefaultValue(sdfData, texAttrPath, path);
     }

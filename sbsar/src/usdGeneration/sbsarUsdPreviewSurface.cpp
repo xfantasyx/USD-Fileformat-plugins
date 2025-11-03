@@ -70,9 +70,10 @@ bindTexture(SdfAbstractData* sdfData,
             const BindInfo& bindInfo,
             const SdfPath& uvOutputAttrPath,
             const SdfPath& textureAssetAttrPath,
-            const SdfPath& fallbackAttrPath,
             const SdfPath& scaleAttrPath,
-            const SdfPath& biasAttrPath)
+            const SdfPath& biasAttrPath,
+            const SdfPath& uvWrapSPath,
+            const SdfPath& uvWrapTPath)
 {
 
     TF_DEBUG(FILE_FORMAT_SBSAR)
@@ -82,14 +83,13 @@ bindTexture(SdfAbstractData* sdfData,
                                       TfToken("file" + bindInfo.name),
                                       AdobeTokens->UsdUVTexture,
                                       bindInfo.outputName,
-                                      { { "sourceColorSpace", bindInfo.color_space },
-                                        { "wrapS", AdobeTokens->repeat },
-                                        { "wrapT", AdobeTokens->repeat } },
+                                      { { "sourceColorSpace", bindInfo.color_space } },
                                       { { "st", uvOutputAttrPath },
                                         { "file", textureAssetAttrPath },
-                                        { "fallback", fallbackAttrPath },
                                         { "scale", scaleAttrPath },
-                                        { "bias", biasAttrPath } });
+                                        { "bias", biasAttrPath },
+                                        { "wrapS", uvWrapSPath },
+                                        { "wrapT", uvWrapTPath } });
 
     return resultPath;
 }
@@ -108,6 +108,8 @@ addUsdPreviewSurfaceImpl(SdfAbstractData* sdfData,
       sdfData, materialPath, AdobeTokens->UsdPreviewSurface, UsdShadeTokens->NodeGraph);
 
     SdfPath uvChannelNamePath = inputPath(materialPath, uv_channel_name);
+    SdfPath uvWrapSPath = inputPath(materialPath, uv_wrap_s_name);
+    SdfPath uvWrapTPath = inputPath(materialPath, uv_wrap_t_name);
 
     // Create Texcoord Reader
     SdfPath txOutputPath = createShader(sdfData,
@@ -151,14 +153,6 @@ addUsdPreviewSurfaceImpl(SdfAbstractData* sdfData,
                 std::string texAssetName = getTextureAssetName(usage);
                 SdfPath textureAssetAttrPath = inputPath(materialPath, texAssetName);
 
-                // Add default value if present
-                SdfPath fallbackAttrPath;
-                auto defaultIt = default_channels.find(usage);
-                if (defaultIt != default_channels.end()) {
-                    auto defaultName = getDefaultValueNames(usage);
-                    fallbackAttrPath = inputPath(materialPath, defaultName.first);
-                }
-
                 SdfPath scaleAttrPath, biasAttrPath;
                 if (isNormal(usage)) {
                     const auto [scaleName, biasName] = getNormalMapScaleAndBiasNames(usage);
@@ -172,9 +166,10 @@ addUsdPreviewSurfaceImpl(SdfAbstractData* sdfData,
                                                     bindInfo,
                                                     uvOutputPath,
                                                     textureAssetAttrPath,
-                                                    fallbackAttrPath,
                                                     scaleAttrPath,
-                                                    biasAttrPath);
+                                                    biasAttrPath,
+                                                    uvWrapSPath,
+                                                    uvWrapTPath);
 
                 inputConnections.emplace_back(bindInfo.name, texResultPath);
             }
@@ -204,15 +199,11 @@ addUsdPreviewSurface(SdfAbstractData* sdfData,
                      const SdfPath& materialPath,
                      const SubstanceAir::GraphDesc& graphDesc)
 {
-    return addUsdPreviewSurfaceImpl(sdfData, materialPath, graphDesc, _opaqueMapBindings);
-}
-
-bool
-addUsdPreviewSurfaceRefractive(SdfAbstractData* sdfData,
-                               const SdfPath& materialPath,
-                               const SubstanceAir::GraphDesc& graphDesc)
-{
-    return addUsdPreviewSurfaceImpl(sdfData, materialPath, graphDesc, _refractiveMapBindings);
+    if (hasUsage("refraction", graphDesc)) {
+        return addUsdPreviewSurfaceImpl(sdfData, materialPath, graphDesc, _refractiveMapBindings);
+    } else {
+        return addUsdPreviewSurfaceImpl(sdfData, materialPath, graphDesc, _opaqueMapBindings);
+    }
 }
 
 }

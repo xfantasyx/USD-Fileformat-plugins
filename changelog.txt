@@ -1,3 +1,56 @@
+v1.2.0  October 22nd, 2025
+fbx:
+    - fix mesh import when fbx mesh is a root node
+    - do not require `gtest` if tests are disabled
+    - bind meshes that have materials but no elementmaterials
+    - add 'triangulatemeshes' import option to allow control of whether triangulation should be performed
+    - add generator metadata to USD
+    - support bitangents/tangents during import/emport
+    - fix material property mapping for non lambert/phong shader models
+gltf:
+    - fix material index lookup when material is missing
+    - support khr_materials_volume_scatter extension
+    - improved support for gltf scattering extension
+    - add support for textures with brackets in their file names
+    - support EXT_materials_specular_edge_color & EXT_materials_clearcoat_color
+    - add generator metadata to USD
+    - fix various crashes
+    - support bitangents/tangents during import/export
+    - fix inverted normal maps
+obj:
+    - replace backslash with slash in texture filepath
+    - fix crash on loading a file > 2gb
+    - allow single value for ke material setting
+ply:
+    - fix reading gsplat sh coefficients
+    - fix export issues when not all meshes have uvs or normals
+    - remove clipping to SH0 for Gsplat
+    - fix GSplat import and export and add support to SH4
+spz:
+    - remove clipping to SH0 for Gsplat
+    - fix GSplat import and export and add support to SH4
+sbsar:
+    - expose uv texture repeat controls
+    - panorama support
+    - refactor of sbsar for MaterialX support
+    - allow for unlimited cache
+    - switching the default normal format to sbsar
+stl:
+    - reverse normals on export
+    - support empty normals on import
+    - calculate geometric normals on import
+utility:
+    - increase MaterialX OpenPBR support
+    - improve shared file format args
+    - refactor input struct & material processing
+    - fix for crash in smooth normals computation
+    - update test baseline images for 24.11 renderer changes
+cmake:
+    - switch from cmake FetchContent to CPM
+    - updating openimageio cmake
+usd:
+    - adding support for usd 25.05.01
+
 v1.1.1  March 10th, 2025
 fbx:
     - added null and index checks

@@ -60,7 +60,7 @@ UsdPlyFileFormat::InitData(const FileFormatArguments& args) const
         TF_DEBUG_MSG(
           FILE_FORMAT_PLY, "FileFormatArg: %s = %s\n", arg.first.c_str(), arg.second.c_str());
     }
-    argReadBool(args, AdobeTokens->writeMaterialX.GetText(), pd->writeMaterialX, DEBUG_TAG);
+    pd->parseFromFileFormatArgs(args, DEBUG_TAG);
     argReadBool(args, UsdPlyFileFormatTokens->points.GetText(), pd->points, DEBUG_TAG);
     argReadFloat(args, UsdPlyFileFormatTokens->pointWidth.GetText(), pd->pointWidth, DEBUG_TAG);
     argReadBool(args,
@@ -119,8 +119,7 @@ UsdPlyFileFormat::Read(SdfLayer* layer, const std::string& resolvedPath, bool me
         options.pointWidth = data->pointWidth;
         options.importWithUpAxisCorrection = data->withUpAxisCorrection;
         options.importGsplatClippingBox = data->gsplatsClippingBox;
-        WriteLayerOptions layerOptions;
-        layerOptions.writeMaterialX = data->writeMaterialX;
+        WriteLayerOptions layerOptions(*data);
 
         // Since the resolved path may contain non-ascii characters, we convert the string
         // path to a filesystem path and then use it to create an ifstream we can then pass to

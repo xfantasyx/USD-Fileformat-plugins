@@ -10,6 +10,7 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 #include <fileformatutils/layerRead.h>
+#include <fileformatutils/layerReadMaterial.h>
 
 #include <fileformatutils/common.h>
 #include <fileformatutils/debugCodes.h>
@@ -18,34 +19,8 @@ governing permissions and limitations under the License.
 #include <fileformatutils/layerWriteShared.h>
 #include <fileformatutils/usdData.h>
 
-#include <pxr/base/tf/pathUtils.h>
-#include <pxr/usd/ar/asset.h>
-#include <pxr/usd/ar/defaultResolver.h>
-#include <pxr/usd/ar/resolverContextBinder.h>
-#include <pxr/usd/kind/registry.h>
-#include <pxr/usd/pcp/cache.h>
-#include <pxr/usd/sdf/assetPath.h>
-#include <pxr/usd/sdf/layer.h>
-#include <pxr/usd/sdf/payload.h>
-#include <pxr/usd/sdf/reference.h>
-#include <pxr/usd/sdf/types.h>
-#include <pxr/usd/usd/common.h>
-#include <pxr/usd/usd/modelAPI.h>
-#include <pxr/usd/usd/payloads.h>
-#include <pxr/usd/usd/primCompositionQuery.h>
-#include <pxr/usd/usd/primRange.h>
-#include <pxr/usd/usd/references.h>
-#include <pxr/usd/usd/relationship.h>
-#include <pxr/usd/usd/schemaRegistry.h>
-#include <pxr/usd/usd/stage.h>
-#include <pxr/usd/usd/typed.h>
-#include <pxr/usd/usd/zipFile.h>
-#include <pxr/usd/usdGeom/basisCurves.h>
 #include <pxr/usd/usdGeom/camera.h>
-#include <pxr/usd/usdGeom/hermiteCurves.h>
 #include <pxr/usd/usdGeom/metrics.h>
-#include <pxr/usd/usdGeom/nurbsCurves.h>
-#include <pxr/usd/usdGeom/nurbsPatch.h>
 #include <pxr/usd/usdGeom/pointInstancer.h>
 #include <pxr/usd/usdGeom/points.h>
 #include <pxr/usd/usdGeom/primvarsAPI.h>
@@ -53,8 +28,6 @@ governing permissions and limitations under the License.
 #include <pxr/usd/usdGeom/sphere.h>
 #include <pxr/usd/usdGeom/tokens.h>
 #include <pxr/usd/usdGeom/xform.h>
-#include <pxr/usd/usdGeom/xformCache.h>
-#include <pxr/usd/usdGeom/xformCommonAPI.h>
 #include <pxr/usd/usdGeom/xformable.h>
 #include <pxr/usd/usdLux/diskLight.h>
 #include <pxr/usd/usdLux/distantLight.h>
@@ -62,10 +35,7 @@ governing permissions and limitations under the License.
 #include <pxr/usd/usdLux/rectLight.h>
 #include <pxr/usd/usdLux/shapingAPI.h>
 #include <pxr/usd/usdLux/sphereLight.h>
-#include <pxr/usd/usdShade/connectableAPI.h>
 #include <pxr/usd/usdShade/materialBindingAPI.h>
-#include <pxr/usd/usdShade/output.h>
-#include <pxr/usd/usdShade/tokens.h>
 #include <pxr/usd/usdSkel/animation.h>
 #include <pxr/usd/usdSkel/bindingAPI.h>
 #include <pxr/usd/usdSkel/cache.h>
@@ -73,7 +43,6 @@ governing permissions and limitations under the License.
 #include <pxr/usd/usdSkel/skeleton.h>
 #include <pxr/usd/usdSkel/skeletonQuery.h>
 #include <pxr/usd/usdSkel/utils.h>
-#include <pxr/usd/usdVol/tokens.h>
 #include <pxr/usd/usdVol/volume.h>
 
 #include <algorithm>
@@ -89,22 +58,6 @@ governing permissions and limitations under the License.
 using namespace PXR_NS;
 
 namespace adobe::usd {
-
-struct ReadLayerContext
-{
-    UsdStageRefPtr stage;
-    UsdData* usd;
-    const ReadLayerOptions* options;
-    std::unordered_map<std::string, int> prototypes;
-    std::unordered_map<std::string, int> images;
-    std::unordered_map<std::string, int> imageNames;
-    std::unordered_map<std::string, int> materials;
-    std::unordered_map<std::string, int> ngps;
-    std::vector<std::string> materialBindings;
-    std::vector<std::vector<std::string>> subsetMaterialBindings;
-    UsdGeomXformCache xformCache;
-    std::string debugTag;
-};
 
 /**
  * Check whether the given prim is explicitly marked invisible. For this to be the case, it must:
@@ -261,7 +214,7 @@ readXformInternal(ReadLayerContext& ctx, Node& node, const UsdPrim& prim, int pa
     bool reset;
     auto ops = xformable.GetOrderedXformOps(&reset);
     std::vector<UsdGeomXformOp::Type> opTypes(ops.size());
-    for (unsigned int i = 0; i < ops.size(); i++) {
+    for (size_t i = 0; i < ops.size(); i++) {
         opTypes[i] = ops[i].GetOpType();
     }
     bool hasTranslation = false;
@@ -280,9 +233,9 @@ readXformInternal(ReadLayerContext& ctx, Node& node, const UsdPrim& prim, int pa
         { UsdGeomXformOp::TypeOrient },
         { UsdGeomXformOp::TypeScale },
     };
-    for (unsigned int i = 0; i < opTests.size(); i++) {
+    for (size_t i = 0; i < opTests.size(); i++) {
         if (opTypes == opTests[i]) {
-            for (unsigned int j = 0; j < opTypes.size(); j++) {
+            for (size_t j = 0; j < opTypes.size(); j++) {
                 if (opTypes[j] == UsdGeomXformOp::TypeTranslate) {
                     hasTranslation = true;
                     translationOp = ops[j];
@@ -311,7 +264,7 @@ readXformInternal(ReadLayerContext& ctx, Node& node, const UsdPrim& prim, int pa
             NodeAnimation& nodeAnimation = ensureNodeAnimation(node);
             nodeAnimation.translations.times.resize(times.size());
             nodeAnimation.translations.values.resize(times.size());
-            for (unsigned int i = 0; i < times.size(); i++) {
+            for (size_t i = 0; i < times.size(); i++) {
                 nodeAnimation.translations.times[i] = times[i];
 
                 // Translation is stored as a vector of doubles. To extract it properly, we must
@@ -329,7 +282,7 @@ readXformInternal(ReadLayerContext& ctx, Node& node, const UsdPrim& prim, int pa
             NodeAnimation& nodeAnimation = ensureNodeAnimation(node);
             nodeAnimation.rotations.times.resize(times.size());
             nodeAnimation.rotations.values.resize(times.size());
-            for (unsigned int i = 0; i < times.size(); i++) {
+            for (size_t i = 0; i < times.size(); i++) {
                 nodeAnimation.rotations.times[i] = times[i];
                 rotationOp.Get(&nodeAnimation.rotations.values[i],
                                nodeAnimation.rotations.times[i]);
@@ -343,7 +296,7 @@ readXformInternal(ReadLayerContext& ctx, Node& node, const UsdPrim& prim, int pa
             NodeAnimation& nodeAnimation = ensureNodeAnimation(node);
             nodeAnimation.scales.times.resize(times.size());
             nodeAnimation.scales.values.resize(times.size());
-            for (unsigned int i = 0; i < times.size(); i++) {
+            for (size_t i = 0; i < times.size(); i++) {
                 nodeAnimation.scales.times[i] = times[i];
                 scaleOp.Get(&nodeAnimation.scales.values[i], nodeAnimation.scales.times[i]);
             }
@@ -481,6 +434,50 @@ readMeshOrPointsData(ReadLayerContext& ctx, Mesh& mesh, int meshIndex, const Usd
         } else if (normalsAttr.IsAuthored()) {
             normalsAttr.Get(&mesh.normals.values, 0);
             mesh.normals.interpolation = usdMesh.GetNormalsInterpolation();
+        }
+
+        // Read tangents and binormals
+        // First try as primvars, then fall back to authored attributes
+        if (!readPrimvar(primvarsAPI, TfToken("tangents"), mesh.tangents)) {
+            UsdAttribute tangentsAttr = prim.GetAttribute(TfToken("tangents"));
+            if (tangentsAttr.IsAuthored()) {
+                tangentsAttr.Get(&mesh.tangents.values, 0);
+                // For manually authored attributes, we need to determine interpolation
+                // Default to faceVarying if not specified, but check for primvar-style metadata
+                TfToken interpolation;
+                if (tangentsAttr.GetMetadata(TfToken("interpolation"), &interpolation)) {
+                    mesh.tangents.interpolation = interpolation;
+                } else {
+                    mesh.tangents.interpolation = UsdGeomTokens->faceVarying;
+                }
+            }
+        }
+        
+        // Try reading bitangents first (new format), then fallback to binormals (old format)
+        if (!readPrimvar(primvarsAPI, TfToken("bitangents"), mesh.bitangents)) {
+            if (!readPrimvar(primvarsAPI, TfToken("binormals"), mesh.bitangents)) {
+                // Try as authored attributes
+                UsdAttribute bitangentsAttr = prim.GetAttribute(TfToken("bitangents"));
+                UsdAttribute binormalsAttr = prim.GetAttribute(TfToken("binormals"));
+                
+                if (bitangentsAttr.IsAuthored()) {
+                    bitangentsAttr.Get(&mesh.bitangents.values, 0);
+                    TfToken interpolation;
+                    if (bitangentsAttr.GetMetadata(TfToken("interpolation"), &interpolation)) {
+                        mesh.bitangents.interpolation = interpolation;
+                    } else {
+                        mesh.bitangents.interpolation = UsdGeomTokens->faceVarying;
+                    }
+                } else if (binormalsAttr.IsAuthored()) {
+                    binormalsAttr.Get(&mesh.bitangents.values, 0);
+                    TfToken interpolation;
+                    if (binormalsAttr.GetMetadata(TfToken("interpolation"), &interpolation)) {
+                        mesh.bitangents.interpolation = interpolation;
+                    } else {
+                        mesh.bitangents.interpolation = UsdGeomTokens->faceVarying;
+                    }
+                }
+            }
         }
     } else if (prim.IsA<UsdGeomPoints>()) {
         UsdGeomPoints usdPoints(prim);
@@ -623,17 +620,18 @@ readMeshOrPointsData(ReadLayerContext& ctx, Mesh& mesh, int meshIndex, const Usd
                     }
                 }
             }
-            for (const TfToken& gsToken : AdobeGsplatSHTokens->allTokens) {
-                // SH-related tokens: fRest0 -- fRest44.
+            int shIndex = 0;
+            while (true) {
                 Primvar<float> shCoeffs;
-                readPrimvar(primvarsAPI, gsToken, shCoeffs);
-                if (shCoeffs.values.size()) {
-                    auto [pointSHCoeffSetIndex, pointSHCoeffSet] =
-                      ctx.usd->addPointSHCoeffSet(meshIndex);
-                    pointSHCoeffSet.indices = shCoeffs.indices;
-                    pointSHCoeffSet.values = shCoeffs.values;
-                    pointSHCoeffSet.interpolation = shCoeffs.interpolation;
-                }
+                if (!readPrimvar(
+                      primvarsAPI, TfToken(std::string("fRest") + std::to_string(shIndex)), shCoeffs) || !shCoeffs.values.size())
+                    break;
+                auto [pointSHCoeffSetIndex, pointSHCoeffSet] =
+                  ctx.usd->addPointSHCoeffSet(meshIndex);
+                pointSHCoeffSet.indices = shCoeffs.indices;
+                pointSHCoeffSet.values = shCoeffs.values;
+                pointSHCoeffSet.interpolation = shCoeffs.interpolation;
+                ++shIndex;
             }
         }
     }
@@ -757,7 +755,7 @@ readSkelRoot(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
         skelSkeleton.GetBindTransformsAttr().Get(&skeleton.bindTransforms, 0);
         skeleton.jointParents.resize(skeleton.joints.size());
         skeleton.inverseBindTransforms.resize(skeleton.joints.size());
-        for (unsigned int i = 0; i < skeleton.joints.size(); i++) {
+        for (size_t i = 0; i < skeleton.joints.size(); i++) {
             TF_DEBUG_MSG(FILE_FORMAT_UTIL,
                          "%s: layer::read %-10s %s\n",
                          ctx.debugTag.c_str(),
@@ -778,7 +776,7 @@ readSkelRoot(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
         // Process skinning targets
         const VtArray<UsdSkelSkinningQuery>& targets = binding.GetSkinningTargets();
         skeleton.meshSkinningTargets.resize(targets.size());
-        for (unsigned int i = 0; i < targets.size(); i++) {
+        for (size_t i = 0; i < targets.size(); i++) {
             const UsdSkelSkinningQuery& skinningQuery = targets[i];
             const UsdPrim& meshPrim = skinningQuery.GetPrim();
             if (meshPrim.IsA<UsdGeomMesh>()) {
@@ -836,12 +834,12 @@ readSkelRoot(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
 
                 skeleton.skeletonAnimations.resize(1);
                 SkeletonAnimation& animation = skeleton.skeletonAnimations.front();
-                unsigned int timesCount = times.size();
+                size_t timesCount = times.size();
                 animation.times.resize(timesCount);
                 animation.translations.resize(timesCount);
                 animation.rotations.resize(timesCount);
                 animation.scales.resize(timesCount);
-                for (unsigned int i = 0; i < timesCount; i++) {
+                for (size_t i = 0; i < timesCount; i++) {
                     VtMatrix4dArray transforms;
                     if (!skelAnimQuery.ComputeJointLocalTransforms(&transforms, times[i])) {
                         continue;
@@ -854,7 +852,7 @@ readSkelRoot(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
 
                     // Add all transforms to the SkeletonAnimation as long as the transforms are
                     // for a joint referred to by skeleton.animatedJoints
-                    for (int j = 0; j < transforms.size(); j++) {
+                    for (size_t j = 0; j < transforms.size(); j++) {
                         if (animatedJointPresent[j]) {
                             GfVec3f translation;
                             GfQuatf rotation;
@@ -913,7 +911,7 @@ readPointInstancer(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
         readPrim(ctx, p, nodeIndex);
     }
 
-    for (unsigned int i = 0; i < protoIndices.size(); i++) {
+    for (size_t i = 0; i < protoIndices.size(); i++) {
         const int protoIndex = meshesBeforePrototypesAdded + protoIndices[i];
         const GfMatrix4d transform = xforms[i];
         if (transform != GfMatrix4d(0.0f) && transform != GfMatrix4d(1.0f)) {
@@ -1014,454 +1012,6 @@ readVolume(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
     }
 
     return true;
-}
-
-// Populates the absolute path, base name, and sanitized extension for an SBSAR asset by resolving
-// the absolute path from the provided URI.
-void
-populatePathPartsFromAssetPath(const SdfAssetPath& path,
-                               std::string& resolvedAssetPath,
-                               std::string& name,
-                               std::string& extension)
-{
-    // Make sure we have a resolved path, either coming from SdfAssetPath value or by running it
-    // throught the resolver.
-    resolvedAssetPath = path.GetResolvedPath().empty()
-                          ? ArGetResolver().Resolve(path.GetAssetPath())
-                          : path.GetResolvedPath();
-    // This will extract the inner most path to the asset:
-    // path/to/package.usdz[path/to/image.png] -> path/to/image.png
-    std::string innerAssetPath = getLayerFilePath(resolvedAssetPath);
-    // This helper function will detect "funky" paths, like those to SBSAR images and convert them
-    // to good usable file paths
-    std::string filePath = extractFilePathFromAssetPath(innerAssetPath);
-    // Strip the path part since we only want the filename and the extension
-    std::string baseName = TfGetBaseName(filePath);
-    name = TfStringGetBeforeSuffix(baseName);
-    extension = TfGetExtension(baseName);
-}
-
-bool
-readImage(ReadLayerContext& ctx, const SdfAssetPath& assetPath, int& index)
-{
-    std::string resolvedAssetPath, name, extension;
-    populatePathPartsFromAssetPath(assetPath, resolvedAssetPath, name, extension);
-
-    // Check in the cache if we've processed this image before
-    if (const auto& it = ctx.images.find(resolvedAssetPath); it != ctx.images.end()) {
-        index = it->second;
-        TF_DEBUG_MSG(FILE_FORMAT_UTIL,
-                     "%s: Image (cached): %s\n",
-                     ctx.debugTag.c_str(),
-                     resolvedAssetPath.c_str());
-        return true;
-    }
-
-    // The image is new. Make sure we don't get name collisions in the short name
-    if (const auto& itName = ctx.imageNames.find(name); itName != ctx.imageNames.end()) {
-        itName->second++;
-        name += "_" + std::to_string(itName->second);
-        TF_DEBUG_MSG(FILE_FORMAT_UTIL,
-                     "%s: Deduplicated image name: %s\n",
-                     ctx.debugTag.c_str(),
-                     name.c_str());
-    } else {
-        ctx.imageNames[name] = 1;
-    }
-
-    auto [imageIndex, image] = ctx.usd->addImage();
-    if (extension == "sbsarimage") {
-        // SBSAR images are a special cases where the data is stored raw and must be transcoded to a
-        // different image in memory
-        extension = getSbsarImageExtension(resolvedAssetPath);
-        image.uri = name + "." + extension;
-        transcodeImageAssetToMemory(resolvedAssetPath, image.uri, image.image);
-    } else {
-        auto asset = ArGetResolver().OpenAsset(ArResolvedPath(resolvedAssetPath));
-        if (!asset) {
-            TF_WARN(
-              "%s: Unable to open asset: %s\n", ctx.debugTag.c_str(), resolvedAssetPath.c_str());
-            return false;
-        }
-        image.uri = name + "." + extension;
-        image.image.resize(asset->GetSize());
-        memcpy(image.image.data(), asset->GetBuffer().get(), asset->GetSize());
-    }
-
-    image.name = name;
-    image.format = getFormat(extension);
-    ctx.images[resolvedAssetPath] = imageIndex;
-    index = imageIndex;
-
-    TF_DEBUG_MSG(FILE_FORMAT_UTIL,
-                 "%s: Image (new): index: %d uri: %s\n",
-                 ctx.debugTag.c_str(),
-                 imageIndex,
-                 resolvedAssetPath.c_str());
-
-    return true;
-}
-
-void
-applyInputMult(Input& input, float mult)
-{
-    if (mult == 1.0f) {
-        return;
-    }
-
-    if (input.image != -1) {
-        GfVec4f s =
-          input.scale.IsHolding<GfVec4f>() ? input.scale.UncheckedGet<GfVec4f>() : GfVec4f(1.0f);
-        input.scale = s * mult;
-    } else if (input.value.IsHolding<GfVec3f>()) {
-        GfVec3f v = input.value.UncheckedGet<GfVec3f>();
-        v *= mult;
-        input.value = v;
-    } else if (input.value.IsHolding<float>()) {
-        float v = input.value.UncheckedGet<float>();
-        v *= mult;
-        input.value = v;
-    }
-}
-
-template<typename T>
-bool
-getShaderInputValue(const UsdShadeShader& shader, const TfToken& name, T& value)
-{
-    UsdShadeInput input = shader.GetInput(name);
-    if (input) {
-        UsdShadeAttributeVector valueAttrs = input.GetValueProducingAttributes();
-        if (!valueAttrs.empty()) {
-            const UsdAttribute& attr = valueAttrs.front();
-            if (UsdShadeUtils::GetType(attr.GetName()) == UsdShadeAttributeType::Input) {
-                valueAttrs.front().Get(&value);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-// Fetches the first value-producing attribute connected to a given shader input.
-// If 'expectShader' is true, verify that the connected source is a shader and that the connection
-// exists. Returns true and sets outAttribute if a suitable attribute is found.
-bool
-fetchPrimaryConnectedAttribute(const UsdShadeInput& shadeInput,
-                               UsdAttribute& outAttribute,
-                               bool expectShader)
-{
-    if (expectShader) {
-        if (!shadeInput.HasConnectedSource()) {
-            TF_WARN("Input %s has no connected source.", shadeInput.GetFullName().GetText());
-            return false;
-        }
-    }
-    UsdShadeAttributeVector attrs = shadeInput.GetValueProducingAttributes();
-    if (attrs.empty()) {
-        return false;
-    }
-    if (attrs.size() > 1) {
-        TF_WARN("Input %s is connected to multiple producing attributes, only the first will be "
-                "processed.",
-                shadeInput.GetFullName().GetText());
-    }
-    outAttribute = attrs[0];
-    if (expectShader) {
-        UsdShadeAttributeType attrType = UsdShadeUtils::GetType(outAttribute.GetName());
-        if (attrType == UsdShadeAttributeType::Input) {
-            TF_WARN("Input %s is connected to an attribute that is not a shader.",
-                    shadeInput.GetFullName().GetText());
-            return false;
-        }
-    }
-    return true;
-}
-
-// Handle texture-related shader inputs such as file paths and wrapping modes.
-void
-handleTextureShader(ReadLayerContext& ctx, const UsdShadeShader& shader, Input& input)
-{
-    SdfAssetPath assetPath;
-    if (getShaderInputValue(shader, AdobeTokens->file, assetPath)) {
-        readImage(ctx, assetPath, input.image);
-    }
-    getShaderInputValue(shader, AdobeTokens->wrapS, input.wrapS);
-    getShaderInputValue(shader, AdobeTokens->wrapT, input.wrapT);
-    getShaderInputValue(shader, AdobeTokens->minFilter, input.minFilter);
-    getShaderInputValue(shader, AdobeTokens->magFilter, input.magFilter);
-    getShaderInputValue(shader, AdobeTokens->scale, input.scale);
-    getShaderInputValue(shader, AdobeTokens->bias, input.bias);
-    getShaderInputValue(shader, AdobeTokens->sourceColorSpace, input.colorspace);
-
-    // Default to 0th UVs unless overridden in handlePrimvarReader
-    input.uvIndex = 0;
-}
-
-UsdShadeShader
-handleTransformShader(ReadLayerContext& ctx, const UsdShadeShader& shader, Input& input)
-{
-
-    UsdShadeShader nextShader;
-    getShaderInputValue(shader, AdobeTokens->rotation, input.transformRotation);
-    getShaderInputValue(shader, AdobeTokens->scale, input.transformScale);
-    getShaderInputValue(shader, AdobeTokens->translation, input.transformTranslation);
-
-    UsdShadeInput stInputCoordReader = shader.GetInput(AdobeTokens->in);
-    UsdAttribute stSourcesInner;
-    if (fetchPrimaryConnectedAttribute(stInputCoordReader, stSourcesInner, true)) {
-        nextShader = UsdShadeShader(stSourcesInner.GetPrim());
-    }
-    return nextShader;
-}
-
-void
-handlePrimvarReader(ReadLayerContext& ctx, const UsdShadeShader& shader, Input& input)
-{
-    TfToken texCoordPrimvar;
-    std::string texCoordPrimvarStr;
-    getShaderInputValue(shader, AdobeTokens->varname, texCoordPrimvarStr);
-
-    // Supports both string and token type values for the varname
-    // string is the correct type, but token was added to support slightly
-    // incorrect assets.
-    if (!texCoordPrimvarStr.empty()) {
-        texCoordPrimvar = TfToken(texCoordPrimvarStr);
-    } else {
-        getShaderInputValue(shader, AdobeTokens->varname, texCoordPrimvar);
-    }
-    int uvIndex = getSTPrimvarTokenIndex(texCoordPrimvar);
-    if (uvIndex >= 0) {
-        input.uvIndex = uvIndex;
-    } else {
-        TF_WARN("Texture reader %s is reading primvar %s. Only 'st' or 'st1'..'stN' is supported",
-                shader.GetPrim().GetPath().GetText(),
-                texCoordPrimvar.GetText());
-    }
-}
-
-void
-readInput(ReadLayerContext& ctx, const UsdShadeShader& surface, const TfToken& name, Input& input)
-{
-    UsdShadeInput shadeInput = surface.GetInput(name);
-    if (!shadeInput) {
-        return;
-    }
-
-    UsdAttribute attr;
-    if (fetchPrimaryConnectedAttribute(shadeInput, attr, false)) {
-        UsdShadeSourceInfoVector sources = shadeInput.GetConnectedSources();
-
-        // Attempt to retrieve the constant value from the attribute.
-        auto [shadingAttrName, attrType] = UsdShadeUtils::GetBaseNameAndType(attr.GetName());
-        if (attrType == UsdShadeAttributeType::Input) {
-            if (!attr.Get(&input.value)) {
-                TF_WARN("Failed to get constant value for input %s", name.GetText());
-                return;
-            }
-        } else {
-            // Process the shader connected to this attribute
-            UsdShadeShader connectedShader(attr.GetPrim());
-            TfToken shaderId;
-            connectedShader.GetShaderId(&shaderId);
-
-            if (shaderId == AdobeTokens->UsdUVTexture) {
-                handleTextureShader(ctx, connectedShader, input);
-
-                UsdShadeInput stInput = connectedShader.GetInput(AdobeTokens->st);
-
-                // The name of the output on the texture reader determines which channel(s) of the
-                // texture we read.
-                input.channel = shadingAttrName;
-
-                // Process the connected source of the 'st' input.
-                if (fetchPrimaryConnectedAttribute(stInput, attr, true)) {
-                    VtValue srcValue;
-                    if (attr.Get(&srcValue)) {
-                        TF_WARN(
-                          "Texture read shader does not support a fixed UV value for input %s",
-                          name.GetText());
-                    } else {
-                        // Handle the shader connected to the UV coordinate.
-                        UsdShadeShader stShader(attr.GetPrim());
-                        stShader.GetShaderId(&shaderId);
-
-                        if (shaderId == AdobeTokens->UsdTransform2d) {
-                            UsdShadeShader nextShader = handleTransformShader(ctx, stShader, input);
-                            if (nextShader) {
-                                stShader = nextShader;
-                                stShader.GetShaderId(&shaderId);
-                            }
-                        }
-
-                        // This is not an "else if", since we can move the stShader
-                        // if we encounter a UV transform.
-                        if (shaderId == AdobeTokens->UsdPrimvarReader_float2) {
-                            handlePrimvarReader(ctx, stShader, input);
-                        } else {
-                            TF_WARN("Unsupported shader type %s for UV input %s",
-                                    shaderId.GetText(),
-                                    name.GetText());
-                        }
-                    }
-                } else {
-                    TF_WARN("Failed to fetch connected attribute for UV input %s", name.GetText());
-                }
-            } else {
-                TF_WARN(
-                  "Unsupported shader type %s for input %s", shaderId.GetText(), name.GetText());
-            }
-        }
-    } else {
-        // If no connections were found, get the shader's input value directly
-        if (!getShaderInputValue(surface, name, input.value)) {
-            TF_WARN("Failed to get input value for %s", name.GetText());
-        }
-    }
-}
-
-bool
-readUsdPreviewSurfaceMaterial(ReadLayerContext& ctx,
-                              Material& material,
-                              const UsdShadeShader& surface)
-{
-    TfToken infoIdToken;
-    surface.GetShaderId(&infoIdToken);
-    if (infoIdToken != AdobeTokens->UsdPreviewSurface) {
-        return false;
-    }
-
-    readInput(ctx, surface, AdobeTokens->useSpecularWorkflow, material.useSpecularWorkflow);
-    readInput(ctx, surface, AdobeTokens->diffuseColor, material.diffuseColor);
-    readInput(ctx, surface, AdobeTokens->emissiveColor, material.emissiveColor);
-    readInput(ctx, surface, AdobeTokens->specularColor, material.specularColor);
-    readInput(ctx, surface, AdobeTokens->normal, material.normal);
-    readInput(ctx, surface, AdobeTokens->metallic, material.metallic);
-    readInput(ctx, surface, AdobeTokens->roughness, material.roughness);
-    readInput(ctx, surface, AdobeTokens->clearcoat, material.clearcoat);
-    readInput(ctx, surface, AdobeTokens->clearcoatRoughness, material.clearcoatRoughness);
-    readInput(ctx, surface, AdobeTokens->opacity, material.opacity);
-    readInput(ctx, surface, AdobeTokens->opacityThreshold, material.opacityThreshold);
-    readInput(ctx, surface, AdobeTokens->displacement, material.displacement);
-    readInput(ctx, surface, AdobeTokens->occlusion, material.occlusion);
-    readInput(ctx, surface, AdobeTokens->ior, material.ior);
-
-    return true;
-}
-
-bool
-_readClearcoatModelsTransmissionTint(const UsdShadeShader& surface)
-{
-    bool value = false;
-    // Check for a custom attribute that carries an indicator where the clearcoat came from
-    surface.GetPrim().GetAttribute(AdobeTokens->clearcoatModelsTransmissionTint).Get(&value);
-    return value;
-}
-
-bool
-_readUnlit(const UsdShadeShader& surface)
-{
-    bool value = false;
-    // Check for a custom attribute that carries an indicator where the clearcoat came from
-    surface.GetPrim().GetAttribute(AdobeTokens->unlit).Get(&value);
-    return value;
-}
-
-bool
-readASMMaterial(ReadLayerContext& ctx, Material& material, const UsdShadeShader& surface)
-{
-    TfToken infoIdToken;
-    surface.GetShaderId(&infoIdToken);
-    if (infoIdToken != AdobeTokens->adobeStandardMaterial) {
-        return false;
-    }
-
-    material.clearcoatModelsTransmissionTint = _readClearcoatModelsTransmissionTint(surface);
-    material.isUnlit = _readUnlit(surface);
-
-    // Note, we currently only support fixed values for emissiveIntensity and sheenOpacity
-    // No texture support yet.
-    float emissiveIntensity = 0.0f;
-    float sheenOpacity = 0.0f;
-    bool scatter = false;
-
-    auto getConstShaderInput = [&](const TfToken& inputName, auto& var) {
-        VtValue val;
-        if (getShaderInputValue(surface, inputName, val)) {
-            if (val.IsHolding<std::remove_reference_t<decltype(var)>>()) {
-                var = val.UncheckedGet<std::remove_reference_t<decltype(var)>>();
-            }
-        }
-    };
-
-    getConstShaderInput(AdobeTokens->emissiveIntensity, emissiveIntensity);
-    getConstShaderInput(AdobeTokens->sheenOpacity, sheenOpacity);
-    getConstShaderInput(AdobeTokens->scatter, scatter);
-
-    readInput(ctx, surface, AdobeTokens->baseColor, material.diffuseColor);
-    readInput(ctx, surface, AdobeTokens->roughness, material.roughness);
-    readInput(ctx, surface, AdobeTokens->metallic, material.metallic);
-    readInput(ctx, surface, AdobeTokens->opacity, material.opacity);
-    readInput(ctx, surface, AdobeTokens->opacityThreshold, material.opacityThreshold);
-    readInput(ctx, surface, AdobeTokens->specularLevel, material.specularLevel);
-    readInput(ctx, surface, AdobeTokens->specularEdgeColor, material.specularColor);
-    readInput(ctx, surface, AdobeTokens->normal, material.normal);
-    readInput(ctx, surface, AdobeTokens->normalScale, material.normalScale);
-    readInput(ctx, surface, AdobeTokens->height, material.displacement);
-    readInput(ctx, surface, AdobeTokens->anisotropyLevel, material.anisotropyLevel);
-    readInput(ctx, surface, AdobeTokens->anisotropyAngle, material.anisotropyAngle);
-    if (emissiveIntensity > 0.0f) {
-        readInput(ctx, surface, AdobeTokens->emissive, material.emissiveColor);
-        applyInputMult(material.emissiveColor, emissiveIntensity);
-    }
-    if (sheenOpacity > 0.0f) {
-        readInput(ctx, surface, AdobeTokens->sheenColor, material.sheenColor);
-        // XXX sheenOpacity can't really be multiplied into the color. We currently drop this value
-    }
-    readInput(ctx, surface, AdobeTokens->sheenRoughness, material.sheenRoughness);
-    readInput(ctx, surface, AdobeTokens->translucency, material.transmission);
-    readInput(ctx, surface, AdobeTokens->IOR, material.ior);
-    readInput(ctx, surface, AdobeTokens->absorptionColor, material.absorptionColor);
-    readInput(ctx, surface, AdobeTokens->absorptionDistance, material.absorptionDistance);
-    if (scatter) {
-        readInput(ctx, surface, AdobeTokens->scatteringColor, material.scatteringColor);
-        readInput(ctx, surface, AdobeTokens->scatteringDistance, material.scatteringDistance);
-    }
-    readInput(ctx, surface, AdobeTokens->coatOpacity, material.clearcoat);
-    readInput(ctx, surface, AdobeTokens->coatColor, material.clearcoatColor);
-    readInput(ctx, surface, AdobeTokens->coatRoughness, material.clearcoatRoughness);
-    readInput(ctx, surface, AdobeTokens->coatIOR, material.clearcoatIor);
-    readInput(ctx, surface, AdobeTokens->coatSpecularLevel, material.clearcoatSpecular);
-    readInput(ctx, surface, AdobeTokens->coatNormal, material.clearcoatNormal);
-    readInput(ctx, surface, AdobeTokens->ambientOcclusion, material.occlusion);
-    readInput(ctx, surface, AdobeTokens->volumeThickness, material.volumeThickness);
-
-    return true;
-}
-
-bool
-readMaterial(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
-{
-    auto [materialIndex, material] = ctx.usd->addMaterial();
-    ctx.materials[prim.GetPath().GetString()] = materialIndex;
-    material.name = prim.GetPath().GetName();
-    material.displayName = prim.GetDisplayName();
-    UsdShadeMaterial usdMaterial(prim);
-
-    // We give preference to the Adobe ASM surface, if present, and fallback to the standard
-    // UsdPreviewSurface
-    UsdShadeShader surface = usdMaterial.ComputeSurfaceSource({ AdobeTokens->adobe });
-    bool success = false;
-    if (surface) {
-        success = readASMMaterial(ctx, material, surface);
-        if (!success) {
-            success = readUsdPreviewSurfaceMaterial(ctx, material, surface);
-        }
-    } else {
-        TF_WARN("No surface shader for material %s", prim.GetPath().GetText());
-    }
-
-    printMaterial("layer::read", prim.GetPath(), material, ctx.debugTag);
-    return success;
 }
 
 bool
@@ -1714,7 +1264,7 @@ readPrim(ReadLayerContext& ctx, const UsdPrim& prim, int parent)
 void
 resolveMaterialBindings(ReadLayerContext& ctx)
 {
-    for (unsigned int i = 0; i < ctx.usd->meshes.size(); i++) {
+    for (size_t i = 0; i < ctx.usd->meshes.size(); i++) {
         std::string name = ctx.materialBindings[i];
         if (!name.empty()) {
             if (ctx.materials.find(name) == ctx.materials.end()) {
@@ -1742,7 +1292,7 @@ resolveMaterialBindings(ReadLayerContext& ctx)
                 ctx.usd->meshes[i].material = -1;
             }
         }
-        for (unsigned int j = 0; j < ctx.subsetMaterialBindings[i].size(); j++) {
+        for (size_t j = 0; j < ctx.subsetMaterialBindings[i].size(); j++) {
             std::string name = ctx.subsetMaterialBindings[i][j];
             if (!name.empty()) {
                 if (ctx.materials.find(name) == ctx.materials.end()) {

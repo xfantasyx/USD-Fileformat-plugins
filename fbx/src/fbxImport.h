@@ -22,6 +22,7 @@ struct ImportFbxOptions
     bool importImages = true;
     bool importPhong = false;
     bool importAnimationStacks = false;
+    bool triangulateMeshes = true;
     PXR_NS::TfToken originalColorSpace;
 };
 

@@ -151,6 +151,7 @@ struct USDFFUTILS_API Mesh
     // XXX tangents in USD are usually GfVec3f and are only supported by Hermite curves. Something
     // is not quite right
     Primvar<PXR_NS::GfVec4f> tangents;
+    Primvar<PXR_NS::GfVec3f> bitangents;
     Primvar<PXR_NS::GfVec2f> uvs;
     std::vector<Primvar<PXR_NS::GfVec2f>> extraUVSets;
     std::vector<Primvar<PXR_NS::GfVec3f>> colors;
@@ -334,6 +335,12 @@ struct USDFFUTILS_API Light
     ImageAsset texture; // IBL texture.
 };
 
+constexpr PXR_NS::GfVec4f kDefaultTexScale = PXR_NS::GfVec4f(1.0f);
+constexpr PXR_NS::GfVec4f kDefaultTexBias = PXR_NS::GfVec4f(0.0f);
+constexpr float kDefaultUvRotation = 0.0f;
+constexpr PXR_NS::GfVec2f kDefaultUvScale = PXR_NS::GfVec2f(1.0f);
+constexpr PXR_NS::GfVec2f kDefaultUvTranslation = PXR_NS::GfVec2f(0.0f);
+
 /// \ingroup utils_materials
 /// \brief Material Input data
 struct USDFFUTILS_API Input
@@ -347,17 +354,26 @@ struct USDFFUTILS_API Input
     PXR_NS::TfToken minFilter;
     PXR_NS::TfToken magFilter;
     PXR_NS::TfToken colorspace;
-    PXR_NS::VtValue scale;
-    PXR_NS::VtValue bias;
-    PXR_NS::VtValue transformRotation;
-    PXR_NS::VtValue transformScale;
-    PXR_NS::VtValue transformTranslation;
+    PXR_NS::GfVec4f scale = kDefaultTexScale;
+    PXR_NS::GfVec4f bias = kDefaultTexBias;
+    float uvRotation = kDefaultUvRotation;
+    PXR_NS::GfVec2f uvScale = kDefaultUvScale;
+    PXR_NS::GfVec2f uvTranslation = kDefaultUvTranslation;
 
     bool isEmpty() const;
     int numChannels() const;
     bool isZeroInput() const;
     bool isZeroTexture() const;
     bool isZeroValue() const;
+    bool hasDefaultScaleAndBias() const
+    {
+        return scale == kDefaultTexScale && bias == kDefaultTexBias;
+    }
+    bool hasDefaultTransform() const
+    {
+        return uvRotation == kDefaultUvRotation && uvScale == kDefaultUvScale &&
+               uvTranslation == kDefaultUvTranslation;
+    }
 };
 
 /// \ingroup utils_materials
@@ -407,6 +423,7 @@ struct USDFFUTILS_API Material
     Input absorptionColor;
     Input scatteringDistance;
     Input scatteringColor;
+    Input scatteringDistanceScale;
 };
 
 /// \ingroup utils_layer
@@ -472,18 +489,16 @@ getInputValue(const Input& input, T* value)
 
     T v = input.value.UncheckedGet<T>();
 
-    PXR_NS::GfVec4f scale = input.scale.GetWithDefault<PXR_NS::GfVec4f>(PXR_NS::GfVec4f(1.0f));
-    PXR_NS::GfVec4f bias = input.bias.GetWithDefault<PXR_NS::GfVec4f>(PXR_NS::GfVec4f(0.0f));
-
     if constexpr (std::is_same_v<T, float>) {
-        *value = scale[0] * v + bias[0];
+        *value = input.scale[0] * v + input.bias[0];
     } else if constexpr (std::is_same_v<T, PXR_NS::GfVec2f>) {
-        *value = PXR_NS::GfVec2f(scale[0], scale[1]) * v + PXR_NS::GfVec2f(bias[0], bias[1]);
+        *value = PXR_NS::GfVec2f(input.scale[0], input.scale[1]) * v +
+                 PXR_NS::GfVec2f(input.bias[0], input.bias[1]);
     } else if constexpr (std::is_same_v<T, PXR_NS::GfVec3f>) {
-        *value = PXR_NS::GfVec3f(scale[0], scale[1], scale[2]) * v +
-                 PXR_NS::GfVec3f(bias[0], bias[1], bias[2]);
+        *value = PXR_NS::GfVec3f(input.scale[0], input.scale[1], input.scale[2]) * v +
+                 PXR_NS::GfVec3f(input.bias[0], input.bias[1], input.bias[2]);
     } else if constexpr (std::is_same_v<T, PXR_NS::GfVec4f>) {
-        *value = scale * v + bias;
+        *value = input.scale * v + input.bias;
     } else {
         return false;
     }
@@ -541,6 +556,11 @@ class USDFFUTILS_API UniqueNameEnforcer
   public:
     void enforceUniqueness(std::string& name);
 };
+
+// Remove any brackets from the file name as they are used as sentinels in the asset resolver
+// Currently only used by the GLTF plugin to adjust the file name of the image asset.
+USDFFUTILS_API void
+removeBrackets(std::string& name);
 
 // Currently used by the FBX and OBJ plugins whose color space data may either be linear
 // or sRGB.  This checks if the outputColorSpace if specifically set, if not, it will

@@ -26,39 +26,43 @@ BASELINE_FOLDERNAME = "baseline"
 OUTPUT_FOLDERNAME = "output"
 CONVERTED_SUFFIX = "_roundtrip"
 
-def compare_images_with_similarity_threshold(img1_path, img2_path, similarity_threshold=0.9):
+def compare_images_with_similarity_threshold(baseline_img_path, generated_img_path, similarity_threshold=0.9):
     """
     Compare two images and check if they are similar based on a similarity threshold.
 
     Parameters:
-        img1_path (str): File path to the first image.
-        img2_path (str): File path to the second image.
+        baseline_img_path (str): File path to the baseline image used to compare against.
+        generated_img_path (str): File path to the generated image to be compared to the baseline.
         similarity_threshold (float): The threshold for similarity ratio (0 to 1).
 
     Returns:
         bool: True if images are similar above the given threshold, False otherwise.
     """
-    img1 = cv2.imread(img1_path)
-    img2 = cv2.imread(img2_path)
+    baseline_img = cv2.imread(baseline_img_path)
+    generated_img = cv2.imread(generated_img_path)
 
     # Check if images are loaded
-    if img1 is None or img2 is None:
-        raise ValueError("One or both images could not be loaded.")
+    if baseline_img is None and generated_img is None:
+        raise ValueError(f"Both images could not be loaded.\nBaseline image path: {baseline_img_path}\nGenerated image path: {generated_img_path}")
+    elif baseline_img is None:
+        raise ValueError(f"Could not load baseline image: {baseline_img_path}")
+    elif generated_img is None:
+        raise ValueError(f"Could not load generated image: {generated_img_path}")
 
     # Check if images have the same dimensions
-    if img1.shape != img2.shape:
+    if baseline_img.shape != generated_img.shape:
         return False
 
     # Calculate the absolute difference and then the binary difference
-    difference = cv2.absdiff(img1, img2)
+    difference = cv2.absdiff(baseline_img, generated_img)
     _, binary_difference = cv2.threshold(difference, 0, 255, cv2.THRESH_BINARY)
 
     # Calculate the percentage of similar pixels
     similar_pixels = np.count_nonzero(binary_difference == 0)
-    total_pixels = img1.shape[0] * img1.shape[1] * img1.shape[2]
+    total_pixels = baseline_img.shape[0] * baseline_img.shape[1] * baseline_img.shape[2]
     similarity_ratio = similar_pixels / total_pixels
     if similarity_ratio < similarity_threshold:
-        logging.error(f"Images are not similar enough: {similarity_ratio}")
+        logging.error(f"Images are not similar enough, similar_pixels={similar_pixels}, total_pixels={total_pixels}, similarity_ratio={similarity_ratio}\nBaseline image path: {baseline_img_path}\nGenerated image path: {generated_img_path}")
     return similarity_ratio >= similarity_threshold
 
 

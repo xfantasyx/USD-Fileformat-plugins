@@ -10,6 +10,7 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 #include <fileformatutils/geometry.h>
+
 #include <fileformatutils/debugCodes.h>
 
 using namespace PXR_NS;
@@ -729,7 +730,7 @@ computeSmoothNormals(Mesh& mesh)
 {
     size_t vertexCount = mesh.points.size();
     size_t numFaces = mesh.faces.size();
-    size_t numFaceVertices = mesh.indices.size();
+    size_t totalNumFaceVertices = mesh.indices.size();
 
     // Construct a normals array the same size as the vertex array
     mesh.normals.values.resize(vertexCount);
@@ -743,11 +744,25 @@ computeSmoothNormals(Mesh& mesh)
                  mesh.name.c_str(),
                  vertexCount,
                  numFaces,
-                 numFaceVertices);
+                 totalNumFaceVertices);
     int faceVertexIndex = 0;
+    int numBadFaces = 0;
     int numBadNormals = 0;
     for (size_t faceIdx = 0; faceIdx < numFaces; ++faceIdx) {
         int numFaceVertices = mesh.faces[faceIdx];
+        if (numFaceVertices < 3) {
+            ++numBadFaces;
+            continue;
+        }
+        if ((size_t)(faceVertexIndex + numFaceVertices) >= totalNumFaceVertices) {
+            TF_WARN("Invalid mesh topology: offset {} into indices for face {} is larger than "
+                    "total indices {}",
+                    faceVertexIndex + numFaceVertices,
+                    faceIdx,
+                    totalNumFaceVertices);
+            break;
+        }
+
         // Starting index for the vertices of this face
         int faceVertexIndexBase = faceVertexIndex;
         faceVertexIndex += numFaceVertices;
@@ -757,13 +772,22 @@ computeSmoothNormals(Mesh& mesh)
         // we precompute the prev and current values and then move them forward by one in each
         // iteration
         int prevIndex = mesh.indices[faceVertexIndexBase + (numFaceVertices - 1)];
+        if (prevIndex >= vertexCount) {
+            continue;
+        }
         GfVec3f prevP = mesh.points[prevIndex];
         int currentIndex = mesh.indices[faceVertexIndexBase];
+        if (currentIndex >= vertexCount) {
+            continue;
+        }
         GfVec3f currentP = mesh.points[currentIndex];
 
         for (int i = 0; i < numFaceVertices; ++i) {
             // Compute the next index and position
             int nextIndex = mesh.indices[faceVertexIndexBase + (i + 1) % numFaceVertices];
+            if (nextIndex >= vertexCount) {
+                continue;
+            }
             GfVec3f nextP = mesh.points[nextIndex];
 
             // Get vectors between the points, outwards from the current point
@@ -801,6 +825,11 @@ computeSmoothNormals(Mesh& mesh)
     // normalize the accumulated vertex normals
     for (unsigned int i = 0; i < vertexCount; ++i) {
         vertexNormals[i].Normalize();
+    }
+
+    if (numBadFaces > 0) {
+        TF_DEBUG_MSG(
+          FILE_FORMAT_UTIL, "Warning: normal computation on %d faces skipped.\n", numBadFaces);
     }
 
     if (numBadNormals > 0) {

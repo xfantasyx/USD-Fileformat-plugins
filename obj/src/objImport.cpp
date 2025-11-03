@@ -109,10 +109,10 @@ importMaterialProperty(const ObjMap& map,
             input.scale = makeVec4f(value);
         }
         if (map.origin != GfVec3f(0.0f)) {
-            input.transformTranslation = GfVec2f(map.origin[0], map.origin[1]);
+            input.uvTranslation = GfVec2f(map.origin[0], map.origin[1]);
         }
         if (map.scale != GfVec3f(1.0f)) {
-            input.transformScale = GfVec2f(map.scale[0], map.scale[1]);
+            input.uvScale = GfVec2f(map.scale[0], map.scale[1]);
         }
         return true;
     } else if (value != T(-1)) { // different than the default value

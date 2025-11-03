@@ -75,13 +75,11 @@ writeObjMap(const UsdData& usd, ObjMap& map, const Input& input)
         map.image = input.image;
 
         // XXX note that mtl doesn't support uv rotation so we only handle translation and scale
-        if (input.transformScale.IsHolding<GfVec2f>()) {
-            GfVec2f scale = input.transformScale.UncheckedGet<GfVec2f>();
-            map.scale = GfVec3f(scale[0], scale[1], 1.0f);
+        if (input.uvScale != kDefaultUvScale) {
+            map.scale = GfVec3f(input.uvScale[0], input.uvScale[1], 1.0f);
         }
-        if (input.transformTranslation.IsHolding<GfVec2f>()) {
-            GfVec2f trans = input.transformTranslation.UncheckedGet<GfVec2f>();
-            map.origin = GfVec3f(trans[0], trans[1], 0.0f);
+        if (input.uvTranslation != kDefaultUvTranslation) {
+            map.origin = GfVec3f(input.uvTranslation[0], input.uvTranslation[1], 0.0f);
         }
     }
 }

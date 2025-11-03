@@ -5,7 +5,7 @@ Finds or fetches the Draco library.
 If USD_FILEFORMATS_FORCE_FETCHCONTENT or USD_FILEFORMATS_FETCH_DRACO are
 TRUE, Draco will be fetched. Otherwise it will be searched via find commands,
 since draco 1.3.6 (the one bundled in USD) does not have a good config module.
-The search is hinted to look into pxr_DIR, but can be overriden by setting
+The search is hinted to look into pxr_ROOT, but can be overriden by setting
 draco_ROOT.
 
 
@@ -44,35 +44,29 @@ endif()
 
 if(USD_FILEFORMATS_FORCE_FETCHCONTENT OR USD_FILEFORMATS_FETCH_DRACO)
     message(STATUS "Fetching draco")
-    include(FetchContent)
-    FetchContent_Declare(
-        draco
+    include(CPM)
+    CPMAddPackage(
+        NAME draco
         GIT_REPOSITORY "https://github.com/google/draco.git"
         GIT_TAG        "9f856abaafb4b39f1f013763ff061522e0261c6f" # 1.56
-        OVERRIDE_FIND_PACKAGE
     )
-    FetchContent_MakeAvailable(draco)
-    if(draco_POPULATED)
-        set(draco_FOUND TRUE)
-    elseif(${draco_FIND_REQUIRED})
-        message(FATAL_ERROR "Could not fetch draco")
-    endif()
+    set(draco_FOUND TRUE)
 else()
     include(SelectLibraryConfigurations)
     include(FindPackageHandleStandardArgs)
 
     find_path(draco_INCLUDE_DIR
-        HINTS ${pxr_DIR}/include
+        HINTS ${pxr_ROOT}/include
         NAMES draco/core/draco_version.h
     )
 
     find_library(draco_LIBRARY_DEBUG
-        HINTS ${pxr_DIR}/lib
+        HINTS ${pxr_ROOT}/lib
         NAMES draco
     )
 
     find_library(draco_LIBRARY_RELEASE
-        HINTS ${pxr_DIR}/lib
+        HINTS ${pxr_ROOT}/lib
         NAMES draco
     )
 

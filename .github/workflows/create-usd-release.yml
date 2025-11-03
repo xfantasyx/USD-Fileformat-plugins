@@ -35,6 +35,10 @@ jobs:
       matrix:
         os: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
     steps:
+      - uses: lukka/get-cmake@latest
+        with:
+            cmakeVersion: "~3.26.0"
+
       - uses: actions/checkout@v4
 
       - name: Check if artifact exists in 'USD-${{ github.event.inputs.usd_version }}-Artifacts' Release

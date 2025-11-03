@@ -30,25 +30,19 @@ endif()
 
 if(USD_FILEFORMATS_FORCE_FETCHCONTENT OR USD_FILEFORMATS_FETCH_LIBXML2)
     message(STATUS "Fetching libxml2")
-    include(FetchContent)
-    FetchContent_Declare(
-        LibXml2
-        GIT_REPOSITORY "https://github.com/GNOME/libxml2.git"
-        GIT_TAG        "ae383bdb74523ddaf831d7db0690173c25e483b3" # Release v2.10.0
-        OVERRIDE_FIND_PACKAGE
-    )
+    include(CPM)
     set(BUILD_SHARED_LIBS OFF) # otherwise fails
     set(LIBXML2_WITH_ICONV OFF)
     set(LIBXML2_WITH_LZMA OFF)
     set(LIBXML2_WITH_PYTHON OFF)
     set(LIBXML2_WITH_ZLIB ON)
     set(LIBXML2_WITH_TESTS OFF)
-    FetchContent_MakeAvailable(LibXml2)
-    if(libxml2_POPULATED)
-        set(LibXml2_FOUND TRUE)
-    elseif(${LibXml2_FIND_REQUIRED})
-        message(FATAL_ERROR "Could not fetch LibXml2")
-    endif()
+    CPMAddPackage(
+        NAME LibXml2
+        GIT_REPOSITORY "https://github.com/GNOME/libxml2.git"
+        GIT_TAG        "ae383bdb74523ddaf831d7db0690173c25e483b3" # Release v2.10.0
+    )
+    set(LibXml2_FOUND TRUE)
 else()
     message(STATUS "Find LibXml2 ${LibXml2_ROOT}")
     if(${LibXml2_FIND_REQUIRED})

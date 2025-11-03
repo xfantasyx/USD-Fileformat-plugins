@@ -81,9 +81,10 @@ bindTexture(SdfAbstractData* sdfData,
             const BindInfo& bindInfo,
             const SdfPath& uvOutputAttrPath,
             const SdfPath& textureAssetAttrPath,
-            const SdfPath& fallbackAttrPath,
             const SdfPath& scaleAttrPath,
-            const SdfPath& biasAttrPath)
+            const SdfPath& biasAttrPath,
+            const SdfPath& uvWrapSPath,
+            const SdfPath& uvWrapTPath)
 {
     TF_DEBUG(FILE_FORMAT_SBSAR)
       .Msg("bindTexture: Binding texture channel %s\n", bindInfo.name.c_str());
@@ -93,14 +94,13 @@ bindTexture(SdfAbstractData* sdfData,
                                       TfToken("file" + bindInfo.name),
                                       AdobeTokens->UsdUVTexture,
                                       bindInfo.outputName,
-                                      { { "sourceColorSpace", bindInfo.colorSpace },
-                                        { "wrapS", AdobeTokens->repeat },
-                                        { "wrapT", AdobeTokens->repeat } },
+                                      { { "sourceColorSpace", bindInfo.colorSpace } },
                                       { { "st", uvOutputAttrPath },
                                         { "file", textureAssetAttrPath },
-                                        { "fallback", fallbackAttrPath },
                                         { "scale", scaleAttrPath },
-                                        { "bias", biasAttrPath } });
+                                        { "bias", biasAttrPath },
+                                        { "wrapS", uvWrapSPath },
+                                        { "wrapT", uvWrapTPath } });
 
     return resultPath;
 }
@@ -118,6 +118,8 @@ addUsdAsmShaderImpl(SdfAbstractData* sdfData,
       createPrimSpec(sdfData, materialPath, AdobeTokens->ASM, UsdShadeTokens->NodeGraph);
 
     SdfPath uvChannelNamePath = inputPath(materialPath, uv_channel_name);
+    SdfPath uvWrapSPath = inputPath(materialPath, uv_wrap_s_name);
+    SdfPath uvWrapTPath = inputPath(materialPath, uv_wrap_t_name);
 
     // Create Texcoord Reader
     SdfPath txOutputPath = createShader(sdfData,
@@ -164,14 +166,6 @@ addUsdAsmShaderImpl(SdfAbstractData* sdfData,
                 std::string texAssetName = getTextureAssetName(usage);
                 SdfPath textureAssetAttrPath = inputPath(materialPath, texAssetName);
 
-                // Add default value if present
-                SdfPath fallbackAttrPath;
-                auto defaultIt = default_channels.find(usage);
-                if (defaultIt != default_channels.end()) {
-                    auto defaultName = getDefaultValueNames(usage);
-                    fallbackAttrPath = inputPath(materialPath, defaultName.first);
-                }
-
                 SdfPath scaleAttrPath, biasAttrPath;
                 if (isNormal(usage)) {
                     const auto [scaleName, biasName] = getNormalMapScaleAndBiasNames(usage);
@@ -185,9 +179,10 @@ addUsdAsmShaderImpl(SdfAbstractData* sdfData,
                                                     bindInfo,
                                                     uvOutputPath,
                                                     textureAssetAttrPath,
-                                                    fallbackAttrPath,
                                                     scaleAttrPath,
-                                                    biasAttrPath);
+                                                    biasAttrPath,
+                                                    uvWrapSPath,
+                                                    uvWrapTPath);
 
                 if (usage == "emissive") {
                     inputValues.emplace_back("emissiveIntensity", 1.0f);
@@ -200,8 +195,8 @@ addUsdAsmShaderImpl(SdfAbstractData* sdfData,
     // Connect to uniform values
     for (auto& usage : uniform_usages) {
         if (hasUsage(usage, graphDesc)) {
-            SdfPath textureAssetAttrPath = inputPath(materialPath, usage);
-            inputConnections.emplace_back(usage, textureAssetAttrPath);
+            SdfPath uniformAttrPath = inputPath(materialPath, usage);
+            inputConnections.emplace_back(usage, uniformAttrPath);
         }
     }
 

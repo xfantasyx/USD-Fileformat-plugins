@@ -38,6 +38,7 @@ build-meta
 
 # Python
 /.venv*
+/venv*
 
 # ide folder
 .vscode/*
@@ -55,5 +56,5 @@ test/assets/obj/*/*.usd
 test/assets/ply/*.usd
 test/assets/stl/*.usd
 
-# Other
+# .DS_Store
 .DS_Store

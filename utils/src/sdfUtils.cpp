@@ -338,3 +338,19 @@ addVariantSelection(SdfAbstractData* data,
 }
 
 }
+
+PXR_NAMESPACE_OPEN_SCOPE
+
+void
+FileFormatDataBase::parseFromFileFormatArgs(const SdfLayer::FileFormatArguments& args,
+                                            const std::string& debugTag)
+{
+    using adobe::usd::argReadBool;
+    using adobe::usd::argReadString;
+    argReadBool(args, "writeUsdPreviewSurface", writeUsdPreviewSurface, debugTag);
+    argReadBool(args, "writeASM", writeASM, debugTag);
+    argReadBool(args, "writeOpenPBR", writeOpenPBR, debugTag);
+    argReadString(args, "assetsPath", assetsPath, debugTag);
+}
+
+PXR_NAMESPACE_CLOSE_SCOPE

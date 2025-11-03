@@ -28,7 +28,7 @@ target_sources(${PLUGIN_NAME}
     usdGeneration/sbsarAsm.cpp
     usdGeneration/sbsarLuxDomeLight.cpp
     usdGeneration/sbsarMaterial.cpp
-    usdGeneration/sbsarMtlx.cpp
+    usdGeneration/sbsarOpenPBR.cpp
     usdGeneration/sbsarSymbolMapper.cpp
     usdGeneration/sbsarUsdPreviewSurface.cpp
     usdGeneration/usdGenerationHelpers.cpp

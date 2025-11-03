@@ -17,6 +17,7 @@ governing permissions and limitations under the License.
 #include <pxr/usd/sdf/abstractData.h>
 #include <pxr/usd/sdf/data.h>
 #include <pxr/usd/sdf/fileFormat.h>
+#include <pxr/usd/sdf/layer.h>
 
 namespace adobe::usd {
 
@@ -309,10 +310,28 @@ PXR_NAMESPACE_OPEN_SCOPE
 
 /// \ingroup utils_layer
 /// \brief SdfData specialization.
-class FileFormatDataBase : public SdfData
+class USDFFUTILS_API FileFormatDataBase : public SdfData
 {
   public:
-    bool writeMaterialX = false;
+    FileFormatDataBase()
+    {
+        // It's very important to create the pseudo root spec right away as there are codepaths that
+        // don't involve file reading (where we currently create this pseudo root spec).  Without
+        // this calling CreateAnonymous or CreateNew on a SdfLayer for the fileformats will produce
+        // a totally empty layer that triggers TF_CODING_ERRORS when this layer get changes
+        // notifications.  Creating this here mimics how regular USDA layers are created and ensures
+        // the pseudo root is always created and available in all code paths.
+        adobe::usd::createPseudoRootSpec(this);
+    };
+
+    bool writeUsdPreviewSurface = true;
+    bool writeASM = true;
+    bool writeOpenPBR = false;
+    std::string assetsPath;
+
+    /// Parse common settings from the file format arguments
+    void parseFromFileFormatArgs(const SdfLayer::FileFormatArguments& args,
+                                 const std::string& debugTag);
 };
 
 PXR_NAMESPACE_CLOSE_SCOPE

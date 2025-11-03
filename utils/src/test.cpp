@@ -10,11 +10,14 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 #include <fileformatutils/test.h>
+
 #include <gtest/gtest.h>
+
 #include <pxr/base/arch/fileSystem.h>
 #include <pxr/base/tf/fileUtils.h>
 #include <pxr/base/tf/pathUtils.h>
 #include <pxr/usd/usd/prim.h>
+#include <pxr/usd/usdGeom/camera.h>
 #include <pxr/usd/usdGeom/primvarsAPI.h>
 #include <pxr/usd/usdGeom/tokens.h>
 #include <pxr/usd/usdLux/diskLight.h>
@@ -23,8 +26,9 @@ governing permissions and limitations under the License.
 #include <pxr/usd/usdLux/rectLight.h>
 #include <pxr/usd/usdLux/shapingAPI.h>
 #include <pxr/usd/usdLux/sphereLight.h>
-#include <pxr/usd/usdGeom/camera.h>
 #include <pxr/usd/usdShade/material.h>
+
+#include <type_traits>
 
 PXR_NAMESPACE_OPEN_SCOPE
 TF_DEFINE_PUBLIC_TOKENS(TestTokens, TEST_TOKENS);
@@ -64,60 +68,95 @@ readPrimvar(UsdGeomPrimvarsAPI& api, const TfToken& name, Primvar<T>& primvar)
     return false;
 }
 
+/**
+ * fuzzyEqual for integer types is just the == operator
+ */
+template<typename IntLike>
+constexpr typename std::enable_if<std::is_integral<IntLike>::value, bool>::type
+fuzzyEqual(IntLike a, IntLike b)
+{
+    return a == b;
+}
+
+/**
+ * fuzzyEqual for floating point types checks that the difference is less than an optional third
+ * parameter, epsilon, that defaults to 1e-6
+ */
+template<typename FloatLike>
+constexpr typename std::enable_if<std::is_floating_point<FloatLike>::value, bool>::type
+fuzzyEqual(FloatLike a, FloatLike b, FloatLike epsilon = 1e-6)
+{
+    return std::abs(a - b) < epsilon;
+}
+
+/**
+ * fuzzyEqual for GfVec types checks that each element is the same. An optional third parameter,
+ * if not null, will be set to the index of the non equal elements if the GfVecs differ.
+ *
+ * Vec is a valid class for this function iff:
+ * - Vec is a class
+ * - Vec has elements accessible with []
+ * - Each element is either an arithmetic type or a reference to one
+ * - Vec has a static dimension field
+ */
+template<typename Vec>
+typename std::enable_if<std::is_class<Vec>::value &&
+                                    std::is_arithmetic<typename std::remove_reference<
+                                      decltype(std::declval<Vec>()[0])>::type>::value,
+                                  bool>::type
+fuzzyEqual(const Vec& a, const Vec& b, size_t* failingIndex = nullptr)
+{
+    for (size_t i = 0; i < Vec::dimension; ++i) {
+        if (!fuzzyEqual(a[i], b[i])) {
+            if (failingIndex) {
+                *failingIndex = i;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
 #define ASSERT_ARRAY(...) assertArray(__VA_ARGS__)
 template<typename T>
 void
-assertArray(VtArray<T>& actual, const ArrayData<T>& expected, const std::string& name) // test a subset of the array
+assertArray(VtArray<T>& actual,
+            const ArrayData<T>& expected,
+            const std::string& name) // test a subset of the array
 {
-    ASSERT_EQ(actual.size(), expected.size);
-    ASSERT_GE(actual.size(), expected.values.size());
+    ASSERT_EQ(actual.size(), expected.size) << name << " does not have the expected number of elements";
+    ASSERT_GE(actual.size(), expected.values.size()) << "There are fewer " << name << " than elements to be checked.";
     bool arraysMatch = true;
     size_t i;
     for (i = 0; i < expected.values.size(); i++) {
-        if (actual[i] != expected.values[i]) {
+        if (!fuzzyEqual(actual[i], expected.values[i])) {
             arraysMatch = false;
             break;
         }
     }
-    ASSERT_TRUE(arraysMatch) << "Variable: " << name << ". Elements at [" << i << "] differ. Actual = " << actual[i]
+    ASSERT_TRUE(arraysMatch) << "Variable: " << name << ". Elements at [" << i
+                             << "] differ. Actual = " << actual[i]
                              << ", Expected = " << expected.values[i];
 }
 
-bool
-floatsEqual(float a, float b, float epsilon = 1e-6)
-{
-    // Ensure that floating point comparison doesn't result in a false negative
-    return std::abs(a - b) < epsilon;
-}
-
-bool
-doublesEqual(double a, double b, double epsilon = 1e-6)
-{
-    // Ensure that floating point comparison doesn't result in a false negative
-    return std::abs(a - b) < epsilon;
-}
-
-#define ASSERT_VEC2F(...) assertVec2f(__VA_ARGS__)
+#define ASSERT_VEC(...) assertVec(__VA_ARGS__)
+template <typename GfVec>
 void
-assertVec2f(const PXR_NS::GfVec2f& actual,
-            const PXR_NS::GfVec2f& expected,
-            std::string msg = "") // test a vector of 2 floats
+assertVec(const GfVec& actual,
+          const GfVec& expected,
+          std::string msg = "")
 {
-    bool valuesMatch = true;
-    size_t i;
-    for (i = 0; i < 2; ++i) {
-        if (!floatsEqual(actual[i], expected[i])) {
-            valuesMatch = false;
-            break;
-        }
-    }
-
     if (msg != "") {
         // Add a space after the message if it's not empty
         msg += ": ";
     }
-    ASSERT_TRUE(valuesMatch) << msg << "Elements at [" << i << "] differ. Actual = " << actual[i]
-                             << ", Expected = " << expected[i];
+
+    // If the vectors are not equal, idx will be set to the index where they differ
+    size_t idx;
+
+    ASSERT_TRUE(fuzzyEqual(actual, expected, &idx))
+      << msg << "Elements at [" << idx << "] differ. Actual = " << actual[idx]
+      << ", Expected = " << expected[idx];
 }
 
 #define ASSERT_QUATF(...) assertQuatf(__VA_ARGS__)
@@ -126,71 +165,16 @@ assertQuatf(const PXR_NS::GfQuatf& actual,
             const PXR_NS::GfQuatf& expected,
             std::string msg = "") // test a quaternion of floats
 {
-    bool valuesMatch = true;
     if (msg != "") {
         // Add a space after the message if it's not empty
         msg += ": ";
     }
 
-    ASSERT_TRUE(floatsEqual(actual.GetReal(), expected.GetReal()))
+    ASSERT_TRUE(fuzzyEqual(actual.GetReal(), expected.GetReal()))
       << msg << "Real elements differ. Actual = " << actual.GetReal()
       << ", Expected = " << expected.GetReal();
-    size_t i;
-    for (i = 0; i < 3; ++i) {
-        if (!floatsEqual(actual.GetImaginary()[i], expected.GetImaginary()[i])) {
-            valuesMatch = false;
-            break;
-        }
-    }
-    ASSERT_TRUE(valuesMatch) << msg << "Imaginary elements at [" << i
-                             << "] differ. Actual = " << actual.GetImaginary()[i]
-                             << ", Expected = " << expected.GetImaginary()[i];
-}
 
-#define ASSERT_VEC3F(...) assertVec3f(__VA_ARGS__)
-void
-assertVec3f(const PXR_NS::GfVec3f& actual,
-            const PXR_NS::GfVec3f& expected,
-            std::string msg = "") // test a vector of 3 floats
-{
-    bool valuesMatch = true;
-    size_t i;
-    for (i = 0; i < 3; ++i) {
-        if (!floatsEqual(actual[i], expected[i])) {
-            valuesMatch = false;
-            break;
-        }
-    }
-
-    if (msg != "") {
-        // Add a space after the message if it's not empty
-        msg += ": ";
-    }
-    ASSERT_TRUE(valuesMatch) << msg << "Elements at [" << i << "] differ. Actual = " << actual[i]
-                             << ", Expected = " << expected[i];
-}
-
-#define ASSERT_VEC3D(...) assertVec3d(__VA_ARGS__)
-void
-assertVec3d(const PXR_NS::GfVec3d& actual,
-            const PXR_NS::GfVec3d& expected,
-            std::string msg = "") // test a vector of 3 doubles
-{
-    bool valuesMatch = true;
-    size_t i;
-    for (i = 0; i < 3; ++i) {
-        if (!doublesEqual(actual[i], expected[i])) {
-            valuesMatch = false;
-            break;
-        }
-    }
-
-    if (msg != "") {
-        // Add a space after the message if it's not empty
-        msg += ": ";
-    }
-    ASSERT_TRUE(valuesMatch) << msg << "Elements at [" << i << "] differ. Actual = " << actual[i]
-                             << ", Expected = " << expected[i];
+    ASSERT_VEC(actual.GetImaginary(), expected.GetImaginary(), msg + "GfQuatf imaginary component");
 }
 
 void
@@ -293,7 +277,7 @@ assertAnimation(PXR_NS::UsdStageRefPtr stage, const std::string& path, const Ani
         GfVec3f scaleValue;
         extractUsdAttribute<GfVec3f>(
           prim, TfToken("xformOp:scale"), &scaleValue, UsdTimeCode(time));
-        ASSERT_VEC3F(scaleValue,
+        ASSERT_VEC(scaleValue,
                      data.scale.at(time),
                      std::string("xformOp:scale[") + std::to_string(time) + "]");
     }
@@ -304,7 +288,7 @@ assertAnimation(PXR_NS::UsdStageRefPtr stage, const std::string& path, const Ani
         GfVec3d translateValue;
         extractUsdAttribute<GfVec3d>(
           prim, TfToken("xformOp:translate"), &translateValue, UsdTimeCode(time));
-        ASSERT_VEC3D(translateValue,
+        ASSERT_VEC(translateValue,
                      data.translate.at(time),
                      std::string("xformOp:translate[") + std::to_string(time) + "]");
     }
@@ -329,7 +313,7 @@ assertCamera(PXR_NS::UsdStageRefPtr stage, const std::string& path, const Camera
     GfVec3f scale;
 
     if (extractUsdAttribute<GfVec3d>(parent, TfToken("xformOp:translate"), &translation)) {
-        ASSERT_VEC3D(
+        ASSERT_VEC(
           translation, cameraData.translate, path + "'s parent translation does not match\n");
     } else if (WARN_IF_ATTRIBUTE_NOT_FOUND) {
         TF_WARN("No translation attribute found for %s\n", path.c_str());
@@ -340,7 +324,7 @@ assertCamera(PXR_NS::UsdStageRefPtr stage, const std::string& path, const Camera
         TF_WARN("No rotation attribute found for %s\n", path.c_str());
     }
     if (extractUsdAttribute<GfVec3f>(parent, TfToken("xformOp:scale"), &scale)) {
-        ASSERT_VEC3F(scale, cameraData.scale, path + "'s parent scale does not match\n");
+        ASSERT_VEC(scale, cameraData.scale, path + "'s parent scale does not match\n");
     } else if (WARN_IF_ATTRIBUTE_NOT_FOUND) {
         TF_WARN("No scale attribute found for %s\n", path.c_str());
     }
@@ -352,21 +336,24 @@ assertCamera(PXR_NS::UsdStageRefPtr stage, const std::string& path, const Camera
 
     GfVec2f clippingRange;
     if (camera.GetClippingRangeAttr().Get(&clippingRange)) {
-        ASSERT_VEC2F(clippingRange, cameraData.clippingRange, path + "'s clipping range does not match\n");
+        ASSERT_VEC(
+          clippingRange, cameraData.clippingRange, path + "'s clipping range does not match\n");
     } else if (WARN_IF_ATTRIBUTE_NOT_FOUND) {
         TF_WARN("No clipping range attribute found for %s\n", path.c_str());
     }
 
     float focalLength;
     if (camera.GetFocalLengthAttr().Get(&focalLength)) {
-        ASSERT_FLOAT_EQ(focalLength, cameraData.focalLength) << path << " focal length does not match\n";
+        ASSERT_FLOAT_EQ(focalLength, cameraData.focalLength)
+          << path << " focal length does not match\n";
     } else if (WARN_IF_ATTRIBUTE_NOT_FOUND) {
         TF_WARN("No focal length attribute found for %s\n", path.c_str());
     }
 
     float focusDistance;
     if (camera.GetFocusDistanceAttr().Get(&focusDistance)) {
-        ASSERT_FLOAT_EQ(focusDistance, cameraData.focusDistance) << path << " focus distance does not match\n";
+        ASSERT_FLOAT_EQ(focusDistance, cameraData.focusDistance)
+          << path << " focus distance does not match\n";
     } else if (WARN_IF_ATTRIBUTE_NOT_FOUND) {
         TF_WARN("No focus distance attribute found for %s\n", path.c_str());
     }
@@ -388,7 +375,8 @@ assertCamera(PXR_NS::UsdStageRefPtr stage, const std::string& path, const Camera
 
     TfToken projection;
     if (camera.GetProjectionAttr().Get(&projection)) {
-        ASSERT_EQ(projection, TfToken(cameraData.projection)) << path << " projection does not match\n";
+        ASSERT_EQ(projection, TfToken(cameraData.projection))
+          << path << " projection does not match\n";
     } else if (WARN_IF_ATTRIBUTE_NOT_FOUND) {
         TF_WARN("No projection attribute found for %s\n", path.c_str());
     }
@@ -423,7 +411,7 @@ assertLight(PXR_NS::UsdStageRefPtr stage, const std::string& path, const LightDa
         ASSERT_TRUE(
           extractUsdAttribute<GfVec3d>(parent, TfToken("xformOp:translate"), &translation))
           << "Expected translation attribute not found for " << path << "\n";
-        ASSERT_VEC3D(translation,
+        ASSERT_VEC(translation,
                      lightData.translation.value(),
                      path + "'s parent translation does not match\n");
     }
@@ -436,7 +424,7 @@ assertLight(PXR_NS::UsdStageRefPtr stage, const std::string& path, const LightDa
     if (lightData.scale) {
         ASSERT_TRUE(extractUsdAttribute<GfVec3f>(parent, TfToken("xformOp:scale"), &scale))
           << "Expected scale attribute not found for " << path << "\n";
-        ASSERT_VEC3F(scale, lightData.scale.value(), path + "'s parent scale does not match\n");
+        ASSERT_VEC(scale, lightData.scale.value(), path + "'s parent scale does not match\n");
     }
 
     // Next, we check the light data itself
@@ -449,7 +437,7 @@ assertLight(PXR_NS::UsdStageRefPtr stage, const std::string& path, const LightDa
             PXR_NS::GfVec3f color;
             ASSERT_TRUE(sphereLight.GetColorAttr().Get(&color))
               << path << " is missing expected color attribute\n";
-            ASSERT_VEC3F(color, lightData.color.value(), path + " color does not match\n");
+            ASSERT_VEC(color, lightData.color.value(), path + " color does not match\n");
         }
 
         if (lightData.intensity) {
@@ -475,7 +463,7 @@ assertLight(PXR_NS::UsdStageRefPtr stage, const std::string& path, const LightDa
             PXR_NS::GfVec3f color;
             ASSERT_TRUE(distantLight.GetColorAttr().Get(&color))
               << path << " is missing expected color attribute\n";
-            ASSERT_VEC3F(color, lightData.color.value(), path + " color does not match\n");
+            ASSERT_VEC(color, lightData.color.value(), path + " color does not match\n");
         }
 
         if (lightData.intensity) {
@@ -496,7 +484,7 @@ assertLight(PXR_NS::UsdStageRefPtr stage, const std::string& path, const LightDa
             PXR_NS::GfVec3f color;
             ASSERT_TRUE(diskLight.GetColorAttr().Get(&color))
               << path << " is missing expected color attribute\n";
-            ASSERT_VEC3F(color, lightData.color.value(), path + " color does not match\n");
+            ASSERT_VEC(color, lightData.color.value(), path + " color does not match\n");
         }
 
         if (lightData.intensity) {
@@ -523,7 +511,7 @@ assertLight(PXR_NS::UsdStageRefPtr stage, const std::string& path, const LightDa
         UsdLuxRectLight rectLight(prim);
         ASSERT_TRUE(rectLight);
 
-        ASSERT_VEC3F(rectLight.color, lightData.color);
+        ASSERT_VEC(rectLight.color, lightData.color);
         ASSERT_FLOAT_EQ(rectLight.intensity, lightData.intensity);
 
         // Rectangle specific attributes
@@ -539,7 +527,7 @@ assertLight(PXR_NS::UsdStageRefPtr stage, const std::string& path, const LightDa
         UsdLuxDomeLight domeLight(prim);
         ASSERT_TRUE(domeLight);
 
-        ASSERT_VEC3F(domeLight.color, lightData.color);
+        ASSERT_VEC(domeLight.color, lightData.color);
         ASSERT_FLOAT_EQ(domeLight.intensity, lightData.intensity);
 
         // Add texture test once we support this on import
@@ -642,7 +630,9 @@ assertInputField(const UsdShadeShader& shader, const std::string& name, const T&
         if (valueAttrs.size()) {
             T actual;
             valueAttrs.front().Get(&actual);
-            ASSERT_EQ(actual, value);
+            ASSERT_EQ(actual, value)
+              << "Input field " << name << " for shader " << shader.GetPath().GetString()
+              << " doesn't match (" << typeid(value).name() << ")";
             return;
         }
     }
@@ -729,14 +719,12 @@ assertMaterial(PXR_NS::UsdStageRefPtr stage, const std::string& path, const Mate
                               UsdShadeShader(stage->GetPrimAtPath(sourcePath));
                             TfToken shaderId;
                             stShader.GetShaderId(&shaderId);
-                            if (!data.transformRotation.IsEmpty() ||
-                                !data.transformScale.IsEmpty() ||
-                                !data.transformTranslation.IsEmpty()) {
+                            if (!data.uvRotation.IsEmpty() || !data.uvScale.IsEmpty() ||
+                                !data.uvTranslation.IsEmpty()) {
                                 ASSERT_TRUE(shaderId == TestTokens->UsdTransform2d);
-                                ASSERT_INPUT_FIELD(stShader, "rotation", data.transformRotation);
-                                ASSERT_INPUT_FIELD(stShader, "scale", data.transformScale);
-                                ASSERT_INPUT_FIELD(
-                                  stShader, "translation", data.transformTranslation);
+                                ASSERT_INPUT_FIELD(stShader, "rotation", data.uvRotation);
+                                ASSERT_INPUT_FIELD(stShader, "scale", data.uvScale);
+                                ASSERT_INPUT_FIELD(stShader, "translation", data.uvTranslation);
                             } else {
                                 std::string shaderName = stShader.GetPrim().GetName().GetString();
                                 if (shaderName == "texCoordReader") {
@@ -776,7 +764,7 @@ assertRender(const std::string& filename, const std::string& imageFilename)
 {
     const std::string imageParentPath = TfGetPathName(imageFilename);
     TfMakeDirs(imageParentPath, -1, true);
-    const std::string command = "usdrecord \"" + filename + "\" \"" + imageFilename + "\"";
+    const std::string command = "HYDRA_ENABLE_HGIGL=0  usdrecord \"" + filename + "\" \"" + imageFilename + "\"";
     int result = archSystem(command);
     ASSERT_EQ(result, 0);
 }

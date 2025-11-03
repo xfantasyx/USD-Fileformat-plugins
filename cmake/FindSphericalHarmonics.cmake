@@ -40,31 +40,28 @@ endif()
 
 if(USD_FILEFORMATS_FORCE_FETCHCONTENT OR USD_FILEFORMATS_FETCH_SPHERICAL_HARMONICS)
     message(STATUS "Fetching SphericalHarmonics")
-    include(FetchContent)
-    FetchContent_Declare(
-        spherical_harmonics_git
+    include(CPM)
+    CPMAddPackage(
+        NAME spherical_harmonics_git
         GIT_REPOSITORY "https://github.com/google/spherical-harmonics.git"
         GIT_TAG        "ccb6c7fec875a1cd5ce5eb1315a9fa7603e0919a"
     )
-    FetchContent_MakeAvailable(spherical_harmonics_git)
 
-    if(spherical_harmonics_git_POPULATED)
-        set(SphericalHarmonics_FOUND TRUE)
-        set(SH_SRC_FILES
-            ${spherical_harmonics_git_SOURCE_DIR}/sh/spherical_harmonics.cc
-            ${spherical_harmonics_git_SOURCE_DIR}/sh/spherical_harmonics.h
-            ${spherical_harmonics_git_SOURCE_DIR}/sh/image.h
-        )
-        add_library(SphericalHarmonics STATIC)
-        target_sources(SphericalHarmonics PRIVATE ${SH_SRC_FILES})
-        set(SH_INCLUDE_DIR "${spherical_harmonics_git_SOURCE_DIR}")
-        target_include_directories(SphericalHarmonics PUBLIC ${SH_INCLUDE_DIR})
-        target_link_libraries(SphericalHarmonics PUBLIC Eigen3::Eigen)
-        set_property(TARGET SphericalHarmonics PROPERTY POSITION_INDEPENDENT_CODE ON)
-        set_property(TARGET SphericalHarmonics PROPERTY CXX_STANDARD 17)
-        target_compile_definitions(SphericalHarmonics PRIVATE "_USE_MATH_DEFINES")
-        add_library(SphericalHarmonics::SphericalHarmonics ALIAS SphericalHarmonics)
-    endif()
+    set(SphericalHarmonics_FOUND TRUE)
+    set(SH_SRC_FILES
+        ${spherical_harmonics_git_SOURCE_DIR}/sh/spherical_harmonics.cc
+        ${spherical_harmonics_git_SOURCE_DIR}/sh/spherical_harmonics.h
+        ${spherical_harmonics_git_SOURCE_DIR}/sh/image.h
+    )
+    add_library(SphericalHarmonics STATIC)
+    target_sources(SphericalHarmonics PRIVATE ${SH_SRC_FILES})
+    set(SH_INCLUDE_DIR "${spherical_harmonics_git_SOURCE_DIR}")
+    target_include_directories(SphericalHarmonics PUBLIC ${SH_INCLUDE_DIR})
+    target_link_libraries(SphericalHarmonics PUBLIC Eigen3::Eigen)
+    set_property(TARGET SphericalHarmonics PROPERTY POSITION_INDEPENDENT_CODE ON)
+    set_property(TARGET SphericalHarmonics PROPERTY CXX_STANDARD 17)
+    target_compile_definitions(SphericalHarmonics PRIVATE "_USE_MATH_DEFINES")
+    add_library(SphericalHarmonics::SphericalHarmonics ALIAS SphericalHarmonics)
 else()
     include(FindPackageHandleStandardArgs)
 

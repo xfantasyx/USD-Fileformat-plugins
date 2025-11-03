@@ -17,7 +17,6 @@ governing permissions and limitations under the License.
 #include "fbxImport.h"
 #include <mutex>
 
-
 #include <fileformatutils/common.h>
 #include <fileformatutils/layerRead.h>
 #include <fileformatutils/layerWriteSdfData.h>
@@ -31,10 +30,11 @@ using namespace adobe::usd;
 PXR_NAMESPACE_OPEN_SCOPE
 
 static std::mutex mutex;
-const TfToken UsdFbxFileFormat::assetsPathToken("fbxAssetsPath", TfToken::Immortal);
-const TfToken UsdFbxFileFormat::phongToken("fbxPhong", TfToken::Immortal);
-const TfToken UsdFbxFileFormat::originalColorSpaceToken("fbxOriginalColorSpace", TfToken::Immortal);
 const TfToken UsdFbxFileFormat::animationStacksToken("fbxAnimationStacks", TfToken::Immortal);
+const TfToken UsdFbxFileFormat::assetsPathToken("fbxAssetsPath", TfToken::Immortal);
+const TfToken UsdFbxFileFormat::originalColorSpaceToken("fbxOriginalColorSpace", TfToken::Immortal);
+const TfToken UsdFbxFileFormat::phongToken("fbxPhong", TfToken::Immortal);
+const TfToken UsdFbxFileFormat::triangulateMeshesToken("triangulateMeshes", TfToken::Immortal);
 
 TF_DEFINE_PUBLIC_TOKENS(UsdFbxFileFormatTokens, USDFBX_FILE_FORMAT_TOKENS);
 
@@ -62,11 +62,17 @@ UsdFbxFileFormat::InitData(const FileFormatArguments& args) const
         TF_DEBUG_MSG(
           FILE_FORMAT_FBX, "FileFormatArg: %s = %s\n", arg.first.c_str(), arg.second.c_str());
     }
-    argReadBool(args, AdobeTokens->writeMaterialX.GetString(), pd->writeMaterialX, DEBUG_TAG);
+    pd->parseFromFileFormatArgs(args, DEBUG_TAG);
+
+    // "fbxAssetsPath" is deprecated in favor of the universal "assetsPath" argument - 2025-3-18
+    // If both are present, "fbxAssetsPath" is stronger.
     argReadString(args, assetsPathToken.GetString(), pd->assetsPath, DEBUG_TAG);
-    argReadBool(args, phongToken.GetString(), pd->phong, DEBUG_TAG);
-    argReadString(args, originalColorSpaceToken.GetString(), pd->originalColorSpace, DEBUG_TAG);
+    argWarnDeprecatedArg(args, assetsPathToken.GetString(), DEBUG_TAG);
+
     argReadBool(args, animationStacksToken.GetString(), pd->animationStacks, DEBUG_TAG);
+    argReadBool(args, phongToken.GetString(), pd->phong, DEBUG_TAG);
+    argReadBool(args, triangulateMeshesToken.GetString(), pd->triangulateMeshes, DEBUG_TAG);
+    argReadString(args, originalColorSpaceToken.GetString(), pd->originalColorSpace, DEBUG_TAG);
     return pd;
 }
 void
@@ -75,8 +81,10 @@ UsdFbxFileFormat::ComposeFieldsForFileFormatArguments(const std::string& assetPa
                                                       FileFormatArguments* args,
                                                       VtValue* dependencyContextData) const
 {
+    argComposeBool(context, args, animationStacksToken, DEBUG_TAG);
     argComposeString(context, args, assetsPathToken, DEBUG_TAG);
     argComposeBool(context, args, phongToken, DEBUG_TAG);
+    argComposeBool(context, args, triangulateMeshesToken, DEBUG_TAG);
     argComposeString(context, args, originalColorSpaceToken, DEBUG_TAG);
 }
 
@@ -112,9 +120,8 @@ UsdFbxFileFormat::Read(SdfLayer* layer, const std::string& resolvedPath, bool me
     options.importImages = !data->assetsPath.empty();
     options.importPhong = data->phong;
     options.originalColorSpace = data->originalColorSpace;
-    WriteLayerOptions layerOptions;
-    layerOptions.writeMaterialX = data->writeMaterialX;
-    layerOptions.assetsPath = data->assetsPath;
+    options.triangulateMeshes = data->triangulateMeshes;
+    WriteLayerOptions layerOptions(*data);
     layerOptions.animationTracks = data->animationStacks;
     {
         const std::lock_guard<std::mutex> lock(mutex); // FBX SDK is not thread safe

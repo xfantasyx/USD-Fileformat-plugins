@@ -32,9 +32,11 @@ struct StlNormal
         z = 0.0;
     }
 
+    float lengthSq() { return (x * x) + (y * y) + (z * z); }
+
     void normalize()
     {
-        float length = sqrt((x * x) + (y * y) + (z * z));
+        float length = sqrt(lengthSq());
         x = x / length;
         y = y / length;
         z = z / length;
@@ -82,4 +84,15 @@ class StlModel
 
 StlNormal
 crossProduct(StlVec3f a, StlVec3f b);
+
+/**
+ * Calculate the unit normal perpendicular to a given StlFacet.
+ *
+ * If the calculated normal would be (0,0,0), when the facet is a degenerate triangle, then a
+ * normal of (0, 1, 0) is returned instead. The value will be irrelevant because the triangle
+ * won't be visible.
+ */
+StlNormal
+calculateNormalOfFacet(StlFacet facet);
+
 }

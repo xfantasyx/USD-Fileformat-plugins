@@ -12,6 +12,7 @@ governing permissions and limitations under the License.
 #include "gltfExport.h"
 #include "debugCodes.h"
 #include "gltfAnisotropy.h"
+#include <cmath>
 #include <fileformatutils/common.h>
 #include <fileformatutils/geometry.h>
 #include <fileformatutils/images.h>
@@ -1051,25 +1052,17 @@ exportTextureTransform(ExportGltfContext& ctx, const Input& input, ExtMap& exten
     bool hasRot = false;
     bool hasScale = false;
     bool hasTrans = false;
-    if (input.transformRotation.IsHolding<float>()) {
-        rot = input.transformRotation.UncheckedGet<float>() * deg2rad;
-        hasRot = rot != 0.0f;
+    if (input.uvRotation != kDefaultUvRotation) {
+        rot = input.uvRotation * deg2rad;
+        hasRot = true;
     }
-    if (input.transformScale.IsHolding<GfVec2f>()) {
-        scale = input.transformScale.UncheckedGet<GfVec2f>();
-        scale[1] = -scale[1];
+    if (input.uvScale != kDefaultUvScale) {
+        scale = input.uvScale;
         hasScale = scale[0] != 1.0f || scale[1] != 1.0f;
-    } else {
-        scale[1] = -1.0f;
-        hasScale = true;
     }
-    if (input.transformTranslation.IsHolding<GfVec2f>()) {
-        trans = input.transformTranslation.UncheckedGet<GfVec2f>();
-        trans[1] = 1.0f - trans[1];
+    if (input.uvTranslation != kDefaultUvTranslation) {
+        trans = input.uvTranslation;
         hasTrans = trans[0] != 0.0f || trans[1] != 0.0f;
-    } else {
-        trans[1] = 1.0f;
-        hasTrans = true;
     }
 
     if (hasRot || hasScale || hasTrans) {
@@ -1120,17 +1113,15 @@ addTextureToExt(ExportGltfContext& ctx,
 
         if (!factorName.empty()) {
             if (input.channel == AdobeTokens->rgb) {
-                if (translatedInput.scale.IsHolding<GfVec4f>()) {
-                    const GfVec4f& scale = translatedInput.scale.UncheckedGet<GfVec4f>();
-                    if (scale[0] != factorDefaultValue || scale[1] != factorDefaultValue ||
-                        scale[2] != factorDefaultValue) {
-                        addColorValueToExt(ext, factorName, GfVec3f(scale[0], scale[1], scale[2]));
-                    }
+                GfVec3f scale(
+                  translatedInput.scale[0], translatedInput.scale[1], translatedInput.scale[2]);
+                if (scale != GfVec3f(factorDefaultValue)) {
+                    addColorValueToExt(ext, factorName, scale);
                 }
             } else {
                 int channel = token2Channel(input.channel);
-                if (channel != -1 && translatedInput.scale.IsHolding<GfVec4f>()) {
-                    float scale = translatedInput.scale.UncheckedGet<GfVec4f>()[channel];
+                if (channel != -1) {
+                    float scale = translatedInput.scale[channel];
                     if (scale != factorDefaultValue) {
                         addFloatValueToExt(ext, factorName, scale);
                     }
@@ -1256,6 +1247,14 @@ exportSpecularExtension(ExportGltfContext& ctx,
                         "specularColorTexture",
                         "specularColorFactor",
                         1.0f)) {
+        // We will always add the EXT_materials_specular_edge_color sub-extension to tell
+        // glTF loaders that this material can be interpreted using the ASM/OpenPBR specular model.
+        std::map<std::string, tinygltf::Value> extensions;
+        std::map<std::string, tinygltf::Value> extObj;
+        // Empty objects seem to be serialized as null in glTF, so we need to add a dummy value for now.
+        extObj["specularEdgeColorEnabled"] = tinygltf::Value(true);
+        addExtension(ctx, extensions, "EXT_materials_specular_edge_color", extObj, false);
+        ext["extensions"] = tinygltf::Value(extensions);
         addMaterialExt(ctx, gm, "KHR_materials_specular", ext);
         return true;
     }
@@ -1325,7 +1324,7 @@ exportAdobeClearcoatSpecularExtension(ExportGltfContext& ctx,
 }
 
 bool
-exportAdobeClearcoatTintExtension(ExportGltfContext& ctx,
+exportClearcoatColorExtension(ExportGltfContext& ctx,
                                   InputTranslator& inputTranslator,
                                   const Material& m,
                                   tinygltf::Material& gm)
@@ -1335,9 +1334,9 @@ exportAdobeClearcoatTintExtension(ExportGltfContext& ctx,
                         inputTranslator,
                         ext,
                         m.clearcoatColor,
-                        "clearcoatTintTexture",
-                        "clearcoatTintFactor")) {
-        addMaterialExt(ctx, gm, "ADOBE_materials_clearcoat_tint", ext);
+                        "clearcoatColorTexture",
+                        "clearcoatColorFactor")) {
+        addMaterialExt(ctx, gm, "EXT_materials_clearcoat_color", ext);
         return true;
     }
 
@@ -1382,8 +1381,8 @@ exportMaterials(ExportGltfContext& ctx)
         // approximated as opacity
         if (!ctx.options.useMaterialExtensions && !m.transmission.isEmpty()) {
             m.opacity = m.transmission;
-            GfVec4f scale = m.opacity.scale.GetWithDefault<GfVec4f>(GfVec4f(1.0f));
-            GfVec4f bias = m.opacity.bias.GetWithDefault<GfVec4f>(GfVec4f(0.0f));
+            GfVec4f scale = m.opacity.scale;
+            GfVec4f bias = m.opacity.bias;
 
             // When converting from transmission to opacity, we should not convert full transmission
             // into zero opacity, since that completely removes the material. It also prevents any
@@ -1434,9 +1433,7 @@ exportMaterials(ExportGltfContext& ctx)
             if (texOpacity >= 0 || ch < 0) {
                 float opacityValue = 1.0f;
                 if (ch >= 0) {
-                    GfVec4f scale = m.opacity.scale.GetWithDefault<GfVec4f>(GfVec4f(1.0f));
-                    GfVec4f bias = m.opacity.bias.GetWithDefault<GfVec4f>(GfVec4f(0.0f));
-                    opacityValue = scale[ch] * texOpacity + bias[ch];
+                    opacityValue = m.opacity.scale[ch] * texOpacity + m.opacity.bias[ch];
                 } else {
                     // the channel token is invalid (eg rgb) so we default to an opacity value
                     // of 1.0
@@ -1446,8 +1443,8 @@ exportMaterials(ExportGltfContext& ctx)
                 m.opacity.image = -1;
                 m.opacity.value = opacityValue;
                 // Clear the scale and bias since it was applied to the constant value
-                m.opacity.scale = VtValue();
-                m.opacity.bias = VtValue();
+                m.opacity.scale = kDefaultTexScale;
+                m.opacity.bias = kDefaultTexBias;
                 TF_DEBUG_MSG(FILE_FORMAT_GLTF,
                              "glTF::write opacity for %s is a constant %f (texture omitted)\n",
                              gm.name.c_str(),
@@ -1485,13 +1482,11 @@ exportMaterials(ExportGltfContext& ctx)
             // GLTF can't express the bias on a texture, so if a texture uses bias we need to
             // process the pixels and incorporate it into the texel data. Note, this always happens
             // when we turn transmission into opacity in the code above.
-            GfVec4f bias = m.opacity.bias.GetWithDefault<GfVec4f>(GfVec4f(0.0f));
-            if (bias != GfVec4f(0.0f)) {
-                GfVec4f scale = m.opacity.scale.GetWithDefault<GfVec4f>(GfVec4f(1.0f));
+            if (m.opacity.bias != kDefaultTexBias) {
                 Input opacity = m.opacity;
                 int chIdx = m.opacity.image >= 0 ? token2Channel(m.opacity.channel) : 0;
-                float opacityScale = scale[chIdx];
-                float opacityBias = bias[chIdx];
+                float opacityScale = m.opacity.scale[chIdx];
+                float opacityBias = m.opacity.bias[chIdx];
                 TF_DEBUG_MSG(FILE_FORMAT_GLTF,
                              "glTF::write material %s, opacity uses bias -> affine transform "
                              "image: %d %f %f\n",
@@ -1612,9 +1607,9 @@ exportMaterials(ExportGltfContext& ctx)
             // Emit a warning if there are both roughness and metallic textures and their
             // transforms differ
             if ((m.roughness.image >= 0 && m.metallic.image >= 0) &&
-                (m.roughness.transformRotation != m.metallic.transformRotation ||
-                 m.roughness.transformScale != m.metallic.transformScale ||
-                 m.roughness.transformTranslation != m.metallic.transformTranslation)) {
+                (m.roughness.uvRotation != m.metallic.uvRotation ||
+                 m.roughness.uvScale != m.metallic.uvScale ||
+                 m.roughness.uvTranslation != m.metallic.uvTranslation)) {
 
                 TF_WARN("glTF::write material %s, roughness and metallic textures have different "
                         "transforms but will be combined into a single texture\n",
@@ -1632,12 +1627,11 @@ exportMaterials(ExportGltfContext& ctx)
               ctx, roughnessMetallic, gm.pbrMetallicRoughness.metallicRoughnessTexture.extensions);
         }
 
-        if (m.diffuseColor.image >= 0 && m.diffuseColor.scale.IsHolding<GfVec4f>()) {
-            GfVec4f scale = baseColor.scale.UncheckedGet<GfVec4f>();
+        if (m.diffuseColor.image >= 0 && m.diffuseColor.scale != kDefaultTexScale) {
             gm.pbrMetallicRoughness.baseColorFactor.resize(4, 1);
-            gm.pbrMetallicRoughness.baseColorFactor[0] = scale[0];
-            gm.pbrMetallicRoughness.baseColorFactor[1] = scale[1];
-            gm.pbrMetallicRoughness.baseColorFactor[2] = scale[2];
+            gm.pbrMetallicRoughness.baseColorFactor[0] = m.diffuseColor.scale[0];
+            gm.pbrMetallicRoughness.baseColorFactor[1] = m.diffuseColor.scale[1];
+            gm.pbrMetallicRoughness.baseColorFactor[2] = m.diffuseColor.scale[2];
         } else if (m.diffuseColor.value.IsHolding<GfVec3f>()) {
             GfVec4f value = baseColor.value.UncheckedGet<GfVec4f>();
             gm.pbrMetallicRoughness.baseColorFactor.resize(4, 1);
@@ -1645,10 +1639,9 @@ exportMaterials(ExportGltfContext& ctx)
             gm.pbrMetallicRoughness.baseColorFactor[1] = value[1];
             gm.pbrMetallicRoughness.baseColorFactor[2] = value[2];
         }
-        if (m.opacity.image >= 0 && m.opacity.scale.IsHolding<GfVec4f>()) {
-            GfVec4f scale = m.opacity.scale.UncheckedGet<GfVec4f>();
+        if (m.opacity.image >= 0 && m.opacity.scale != kDefaultTexScale) {
             gm.pbrMetallicRoughness.baseColorFactor.resize(4, 1);
-            gm.pbrMetallicRoughness.baseColorFactor[3] = scale[3];
+            gm.pbrMetallicRoughness.baseColorFactor[3] = m.opacity.scale[3];
         } else if (m.opacity.value.IsHolding<float>()) {
             float value = m.opacity.value.UncheckedGet<float>();
             gm.pbrMetallicRoughness.baseColorFactor.resize(4, 1);
@@ -1656,8 +1649,8 @@ exportMaterials(ExportGltfContext& ctx)
         }
         float emissiveStrength = 1.0f;
         if (m.emissiveColor.image >= 0) {
-            if (m.emissiveColor.scale.IsHolding<GfVec4f>()) {
-                GfVec4f scale = m.emissiveColor.scale.UncheckedGet<GfVec4f>();
+            if (m.emissiveColor.scale != kDefaultTexScale) {
+                GfVec4f scale = m.emissiveColor.scale;
                 // The emissiveFactor can only go up to 1.0 per component. Anything beyond that
                 // needs to be handled by the emissiveStrength extension.
                 float maxFactor = std::max(scale[0], std::max(scale[1], scale[2]));
@@ -1694,17 +1687,15 @@ exportMaterials(ExportGltfContext& ctx)
             gm.emissiveFactor[1] = value[1];
             gm.emissiveFactor[2] = value[2];
         }
-        if (m.occlusion.image >= 0 && m.occlusion.scale.IsHolding<GfVec4f>()) {
-            GfVec4f scale = m.occlusion.scale.UncheckedGet<GfVec4f>();
-            gm.occlusionTexture.strength = scale[0];
+        if (m.occlusion.image >= 0 && m.occlusion.scale != kDefaultTexScale) {
+            gm.occlusionTexture.strength = m.occlusion.scale[0];
         } else if (m.occlusion.value.IsHolding<float>()) {
             float value = m.occlusion.value.UncheckedGet<float>();
             gm.occlusionTexture.strength = value;
         }
         if (m.metallic.image >= 0) {
-            if (m.metallic.scale.IsHolding<GfVec4f>()) {
-                GfVec4f scale = m.metallic.scale.UncheckedGet<GfVec4f>();
-                gm.pbrMetallicRoughness.metallicFactor = scale[0];
+            if (m.metallic.scale != kDefaultTexScale) {
+                gm.pbrMetallicRoughness.metallicFactor = m.metallic.scale[0];
             }
         } else if (m.metallic.value.IsHolding<float>()) {
             float value = m.metallic.value.UncheckedGet<float>();
@@ -1716,9 +1707,8 @@ exportMaterials(ExportGltfContext& ctx)
         }
 
         if (m.roughness.image >= 0) {
-            if (m.roughness.scale.IsHolding<GfVec4f>()) {
-                GfVec4f scale = m.roughness.scale.UncheckedGet<GfVec4f>();
-                gm.pbrMetallicRoughness.roughnessFactor = scale[0];
+            if (m.roughness.scale != kDefaultTexScale) {
+                gm.pbrMetallicRoughness.roughnessFactor = m.roughness.scale[0];
             }
         } else if (m.roughness.value.IsHolding<float>()) {
             float value = m.roughness.value.UncheckedGet<float>();
@@ -1760,7 +1750,7 @@ exportMaterials(ExportGltfContext& ctx)
             if (exportClearcoat) {
                 exportClearcoatExtension(ctx, inputTranslator, m, gm);
                 exportAdobeClearcoatSpecularExtension(ctx, inputTranslator, m, gm);
-                exportAdobeClearcoatTintExtension(ctx, inputTranslator, m, gm);
+                exportClearcoatColorExtension(ctx, inputTranslator, m, gm);
             }
         }
 
@@ -1938,36 +1928,102 @@ exportMeshes(ExportGltfContext& ctx)
                                           mesh.normals.values.data(),
                                           true);
 
-        int tangentsAccessor = addAccessor(ctx.gltf,
-                                           "tangents",
-                                           TINYGLTF_TARGET_ARRAY_BUFFER,
-                                           TINYGLTF_TYPE_VEC4,
-                                           TINYGLTF_COMPONENT_TYPE_FLOAT,
-                                           mesh.tangents.values.size(),
-                                           mesh.tangents.values.data(),
-                                           true);
+        int tangentsAccessor = -1;
+        std::vector<PXR_NS::GfVec4f> gltfTangents;
+        
+        if (mesh.tangents.values.size() > 0) {
+            // If we have both tangents and bitangents, we need to reconstruct the proper tangent format with handedness in w
+            if (mesh.bitangents.values.size() == mesh.tangents.values.size() &&
+                mesh.normals.values.size() == mesh.tangents.values.size()) {
+                
+                gltfTangents.resize(mesh.tangents.values.size());
+                for (size_t k = 0; k < mesh.tangents.values.size(); k++) {
+                    const PXR_NS::GfVec4f& usdTangent = mesh.tangents.values[k];
+                    const PXR_NS::GfVec3f& normal = mesh.normals.values[k];
+                    const PXR_NS::GfVec3f& bitangent = mesh.bitangents.values[k];
+                    
+                    PXR_NS::GfVec3f tangentXYZ(usdTangent[0], usdTangent[1], usdTangent[2]);
+                    
+                    // bitangent - cross product: normal × tangentXYZ
+                    PXR_NS::GfVec3f expectedBitangent(
+                        normal[1] * tangentXYZ[2] - normal[2] * tangentXYZ[1],
+                        normal[2] * tangentXYZ[0] - normal[0] * tangentXYZ[2],
+                        normal[0] * tangentXYZ[1] - normal[1] * tangentXYZ[0]
+                    );
+                    
+                    float dot = bitangent[0] * expectedBitangent[0] + 
+                               bitangent[1] * expectedBitangent[1] + 
+                               bitangent[2] * expectedBitangent[2];
+                    float handedness = dot >= 0.0f ? 1.0f : -1.0f;
+                    
+                    // Validate the vectors are normalized
+                    float tangentLength = std::sqrt(tangentXYZ[0]*tangentXYZ[0] + tangentXYZ[1]*tangentXYZ[1] + tangentXYZ[2]*tangentXYZ[2]);
+                    float normalLength = std::sqrt(normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]);
+                    float bitangentLength = std::sqrt(bitangent[0]*bitangent[0] + bitangent[1]*bitangent[1] + bitangent[2]*bitangent[2]);
+                    
+                    if (tangentLength < 0.001f || normalLength < 0.001f || bitangentLength < 0.001f) {
+                        TF_WARN("Degenerate tangent space vectors detected at vertex %zu "
+                               "(tangent: %f, normal: %f, bitangent: %f). "
+                               "Using default handedness +1.",
+                               k, tangentLength, normalLength, bitangentLength);
+                        handedness = 1.0f;
+                    }
+                    
+                    gltfTangents[k] = PXR_NS::GfVec4f(tangentXYZ[0], tangentXYZ[1], tangentXYZ[2], handedness);
+                }
+                
+                tangentsAccessor = addAccessor(ctx.gltf,
+                                              "tangents",
+                                              TINYGLTF_TARGET_ARRAY_BUFFER,
+                                              TINYGLTF_TYPE_VEC4,
+                                              TINYGLTF_COMPONENT_TYPE_FLOAT,
+                                              gltfTangents.size(),
+                                              gltfTangents.data(),
+                                              true);
+            } else {
+                // Only tangents available, use them directly
+                tangentsAccessor = addAccessor(ctx.gltf,
+                                              "tangents",
+                                              TINYGLTF_TARGET_ARRAY_BUFFER,
+                                              TINYGLTF_TYPE_VEC4,
+                                              TINYGLTF_COMPONENT_TYPE_FLOAT,
+                                              mesh.tangents.values.size(),
+                                              mesh.tangents.values.data(),
+                                              true);
+            }
+        }
 
         std::vector<int> uvsAccessors;
+        // Create a copy of UV coordinates with flipped V values for glTF export
+        PXR_NS::VtVec2fArray flippedUvs = mesh.uvs.values;
+        for (auto& uv : flippedUvs) {
+            uv[1] = 1.0f - uv[1];
+        }
         int uvsAccessor = addAccessor(ctx.gltf,
                                       "texCoords",
                                       TINYGLTF_TARGET_ARRAY_BUFFER,
                                       TINYGLTF_TYPE_VEC2,
                                       TINYGLTF_COMPONENT_TYPE_FLOAT,
-                                      mesh.uvs.values.size(),
-                                      mesh.uvs.values.data(),
+                                      flippedUvs.size(),
+                                      flippedUvs.data(),
                                       true);
         if (uvsAccessor >= 0)
             uvsAccessors.push_back(uvsAccessor);
 
         int extraUVsCount = 0;
         for (auto const& uvs : mesh.extraUVSets) {
+            // Create a copy of extra UV coordinates with flipped V values for glTF export
+            PXR_NS::VtVec2fArray flippedExtraUvs = uvs.values;
+            for (auto& uv : flippedExtraUvs) {
+                uv[1] = 1.0f - uv[1];
+            }
             uvsAccessor = addAccessor(ctx.gltf,
                                       "texCoords" + std::to_string(extraUVsCount + 1),
                                       TINYGLTF_TARGET_ARRAY_BUFFER,
                                       TINYGLTF_TYPE_VEC2,
                                       TINYGLTF_COMPONENT_TYPE_FLOAT,
-                                      uvs.values.size(),
-                                      uvs.values.data(),
+                                      flippedExtraUvs.size(),
+                                      flippedExtraUvs.data(),
                                       true);
             if (uvsAccessor >= 0) {
                 uvsAccessors.push_back(uvsAccessor);

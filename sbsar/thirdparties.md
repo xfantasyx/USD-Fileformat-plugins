@@ -1,7 +1,7 @@
 # Dependencies on thirdparties
 
-## Usd 
-The plugin depends on the USD ([https://github.com/PixarAnimationStudios/USD]) 
+## Usd
+The plugin depends on the USD ([https://github.com/PixarAnimationStudios/USD])
 The bulk of USD is provided with the application it's compiled for but parts of the USD code
 base will be in the compiled plugin when distributing it.
 USD itself depends on a number of external code bases, the only ones required to build the plugin is:
@@ -23,7 +23,7 @@ in case it's desirable using the **BUILD_PNG** flag to cmake when compiling.
 Libpng and zlib are referenced as git submodules
 
 ## Gtest
-The plugin implements its testing using gtest ([https://git.corp.adobe.com:substance-integrations/thirdparty-gtest.git])
+The plugin implements its testing using gtest ([https://github.com/google/googletest])
 The tests are external to the plugin and are not needed in order to run the binary. The binary itself doesn't use gtest.
 
 gtest is referenced as git submodules

@@ -184,9 +184,9 @@ parseFileFormatArguments(const SBSARFileFormat::FileFormatArguments& args)
         data.depth = 0;
     }
 
-    argReadBool(args, "writeMaterialX", data.writeMaterialX, "SBSAR");
-    argReadBool(args, "writeASM", data.writeASM, "SBSAR");
     argReadBool(args, "writeUsdPreviewSurface", data.writeUsdPreviewSurface, "SBSAR");
+    argReadBool(args, "writeASM", data.writeASM, "SBSAR");
+    argReadBool(args, "writeOpenPBR", data.writeOpenPBR, "SBSAR");
 
     return data;
 }

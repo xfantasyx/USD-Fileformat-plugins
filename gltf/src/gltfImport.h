@@ -22,6 +22,7 @@ struct ImportGltfOptions
     bool importGeometry = true;
     bool importMaterials = true;
     bool importImages = true;
+    bool computeBitangents = false;
 };
 
 /// \ingroup usdgltf
